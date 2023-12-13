@@ -1,0 +1,17 @@
+random_seed: 42
+data:
+  csv_folder_paths: 
+    - './benchmark_datasets/QMOF/mofid/'
+    # - ./'benchmark_datasets/hMOF/mofid/'
+    # - ./'benchmark_datasets/Boyd&Woo/mofid/'
+  vocab_path: "./tokenizer/vocab_with_eos.txt"
+  max_seq_len: 512
+  train_test_ratio: 0.8
+  batch_size: 32
+  num_workers: 4
+
+model:
+  name: "gpt2"
+  pretrained_model_name: "gpt2"
+
+  
