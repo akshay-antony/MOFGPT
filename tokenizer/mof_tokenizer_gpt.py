@@ -66,6 +66,22 @@ class MOFTokenizerGPT(object):
     @property
     def vocab_list(self):
         return list(self.vocab.keys())
+    
+    @property
+    def pad_token_id(self):
+       return self.vocab[self.pad_token]
+    
+    @property
+    def mask_token_id(self):
+        return self.vocab[self.mask_token]
+    
+    @property
+    def bos_token_id(self):
+        return self.vocab[self.bos_token]
+    
+    @property
+    def eos_token_id(self):
+        return self.vocab[self.eos_token]
 
     def get_vocab(self):
         return dict(self.vocab)
@@ -167,27 +183,48 @@ class MOFTokenizerGPT(object):
         """
         return tokens + [self.eos_token_id] 
 
-    def pad_batched_tokens(self, batched_ids, padding=True):
+    def pad_batched_tokens(self, 
+                           batched_token_ids, 
+                           batched_masks,
+                           batched_target_token_ids,
+                           padding=True,
+                           ignore_index=-100):
         """
         Pad batch of input tokens with pad_token_id
         Parameters
         ----------
-        batched_ids: list of torch.Tensor
-            List of input tokens.
+        batched_token_ids: List[List[int]]
+            Batch of input tokens.
+        batched_masks: List[List[int]]  
+            Batch of input masks.
         Returns:
-            2d torch.Tensor with Batch size x Max Length
+            List[List[int]]: Batch of padded input tokens.
+            List[List[int]]: Batch of padded input masks. 
         """
         if padding:
-            batch_max_len = max([ids.shape[0] for ids in batched_ids])
+            batch_max_len = max([ids.shape[0] for ids in batched_token_ids])
             padded_ids = torch.zeros((0, batch_max_len), dtype=torch.long)
-            for ids in batched_ids:
-                curr_padded_ids = torch.cat((ids,
-                                             self.vocab[self.pad_token] * torch.ones(batch_max_len - ids.shape[0],
+            padded_masks = torch.zeros((0, batch_max_len), dtype=torch.long)
+            padded_target_ids = torch.zeros((0, batch_max_len), dtype=torch.long)
+            for token_ids, masks, target_token_ids in zip(batched_token_ids, 
+                                                          batched_masks,
+                                                          batched_target_token_ids):
+                curr_padded_ids = torch.cat((token_ids,
+                                             self.vocab[self.pad_token] * torch.ones(batch_max_len - token_ids.shape[0],
                                                                                      dtype=torch.long)))
                 padded_ids = torch.cat((padded_ids, curr_padded_ids.unsqueeze(0)), dim=0)
-            return padded_ids
+                curr_padded_masks = torch.cat((masks,
+                                               torch.zeros(batch_max_len - masks.shape[0],
+                                                           dtype=torch.long)))
+                padded_masks = torch.cat((padded_masks, curr_padded_masks.unsqueeze(0)), dim=0)
+                curr_padded_target_ids = torch.cat((target_token_ids,
+                                                    ignore_index * torch.ones(batch_max_len - target_token_ids.shape[0],
+                                                                              dtype=torch.long)))
+                padded_target_ids = torch.cat((padded_target_ids, curr_padded_target_ids.unsqueeze(0)), dim=0)
+
+            return padded_ids, padded_masks, padded_target_ids
         else:
-            return batched_ids
+            return batched_token_ids, batched_masks
         
     def encode(self, 
                text):
@@ -209,6 +246,9 @@ class MOFTokenizerGPT(object):
       if self.truncation:
          if self.add_special_tokens:
             tokens = tokens[:self.max_len-2] # -2 for bos and eos
+         else:
+            tokens = tokens[:self.max_len]
+
       if self.add_special_tokens:
           tokens = [self.bos_token] + tokens + [self.eos_token]
       return self.convert_tokens_to_ids(tokens)

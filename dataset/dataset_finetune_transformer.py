@@ -45,7 +45,10 @@ class CORE_Dataset(Dataset):
 
 class MOF_ID_Dataset(Dataset):
     'Characterizes a dataset for PyTorch'
-    def __init__(self, data, tokenizer):
+    def __init__(self, 
+                 data, 
+                 tokenizer,
+                 ignore_index):
             self.data = data
         #     self.data = data[:int(len(data)*use_ratio)]
             self.mofid = self.data[:, 0].astype(str)
@@ -62,6 +65,7 @@ class MOF_ID_Dataset(Dataset):
             print(f"Number of mofs: {len(self.tokens)}")
             self.label = self.data[:, 1].astype(float)
             self.tokenizer = tokenizer
+            self.ignore_index = ignore_index
 
     def __len__(self):
             return len(self.label)
@@ -69,18 +73,30 @@ class MOF_ID_Dataset(Dataset):
     @functools.lru_cache(maxsize=None) 
     def __getitem__(self, index):
             # Load data and get label
-            X = torch.from_numpy(np.asarray(self.tokens[index]))
+            token_ids = torch.from_numpy(np.asarray(self.tokens[index]))
+            target_token_ids = token_ids.clone()[1:]
+            mask_ids = torch.ones_like(token_ids)
             y = torch.from_numpy(np.asarray(self.label[index])).view(-1,1)
 
-            return X, y.float()
+            return {'token_ids':token_ids, 
+                    'mask_ids':mask_ids, 
+                    'target_token_ids':target_token_ids,
+                    'label':y.float()}
     
     def collate_fn(self, data):
         """
         add padding to the batch of data
         """
-        padded_tokens = self.tokenizer.pad_batched_tokens([i[0] for i in data])
-        labels = torch.stack([i[1] for i in data])
-        return padded_tokens, labels
+        padded_tokens, \
+        padded_masks, \
+        target_tokens = self.tokenizer.pad_batched_tokens([i['token_ids'] for i in data],
+                                                          [i['mask_ids'] for i in data],
+                                                          [i['target_token_ids'] for i in data])
+        labels = torch.stack([i['label'] for i in data])
+        return {"token_ids":padded_tokens,
+                "mask_ids":padded_masks,
+                "target_token_ids":target_tokens,
+                "label":labels}
 
 
 class MOF_pretrain_Dataset(Dataset):

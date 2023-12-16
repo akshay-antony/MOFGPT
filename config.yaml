@@ -5,13 +5,53 @@ data:
     # - ./'benchmark_datasets/hMOF/mofid/'
     # - ./'benchmark_datasets/Boyd&Woo/mofid/'
   vocab_path: "./tokenizer/vocab_with_eos.txt"
-  max_seq_len: 512
   train_test_ratio: 0.8
   batch_size: 32
   num_workers: 4
+  ignore_index: -100
+  tokenizer:
+    max_seq_len: 512
+    pad_token: '[PAD]'
+    mask_token: '[MASK]'
+    bos_token: '[BOS]'
+    eos_token: '[EOS]'
+    unk_token: '[UNK]'
+    add_special_tokens: True
+    truncation: True
 
 model:
-  name: "gpt2"
-  pretrained_model_name: "gpt2"
+  name: "llama2"
+  pretrained_model_name: "llama2"
+  hidden_size: 1024
+  intermediate_size: 2048
+  num_hidden_layers: 8
+  num_attention_heads: 8
+  num_key_value_heads: 4 # for grouped query attention
+  use_cache: False
+  rope_theta: 10000.0 # default value
+  hidden_act: "silu" # default value
+  # return vals
+  return_dict: False
+  output_attentions: False
+  output_hidden_states: False
+
+training:
+  device: "cuda"
+  epochs: 10
+  use_mixed_precision: True
+  optimizer:
+    lr: 1e-4
+    type: "AdamW"
+    weight_decay: 0.001
+    gradient_accumulation_steps: 1
+  scheduler:
+    type: "cosine"
+    warmup_ratio: 0.03
+  logging_steps: 100
+  eval_steps: 1000
+  save_steps: 1000
+  
+
+
 
   
