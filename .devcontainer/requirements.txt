@@ -1,4 +1,5 @@
 # requires transformers, torchmetrics
 transformers
 torchmetrics
+wandb
 

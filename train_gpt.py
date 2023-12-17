@@ -17,6 +17,8 @@ from transformers import GPT2Config, \
                          LlamaForCausalLM
 from transformers import get_cosine_schedule_with_warmup
 from torch.cuda.amp import autocast, GradScaler
+from torchmetrics.functional.classification import multiclass_accuracy
+import wandb
 
 
 def train_one_epoch(model,
@@ -30,7 +32,9 @@ def train_one_epoch(model,
                     gradient_accumulation_steps,
                     scaler,
                     model_name,
-                    save_dir):
+                    save_dir,
+                    top_ks,
+                    save_steps=1000):
     model.train()
     loop = tqdm(train_dataloader,
                 desc=f"Training Epoch {epoch}",
@@ -38,6 +42,8 @@ def train_one_epoch(model,
                 total=len(train_dataloader))
     total_train_loss = 0
     total_train_data = 0
+    total_train_logits = []
+    total_train_target_token_ids = []
     optimizer.zero_grad()
 
     for b_no, batch in enumerate(loop):
@@ -61,10 +67,13 @@ def train_one_epoch(model,
             loss = outputs.loss
             loss.backward()
 
+        total_train_logits.append(outputs.logits.detach().cpu().reshape(-1, 
+                                                                        outputs.logits.shape[-1]))
+        total_train_target_token_ids.append(target_token_ids.detach().cpu().reshape(-1))
         total_train_loss += loss.item() * token_ids.shape[0]
         total_train_data += token_ids.shape[0]
 
-        if b_no % gradient_accumulation_steps == 0:
+        if b_no % gradient_accumulation_steps and b_no != 0:
             if is_fp16:
                 scaler.step(optimizer)
                 scaler.update()
@@ -73,26 +82,34 @@ def train_one_epoch(model,
             optimizer.zero_grad()
             scheduler.step()
 
-        if b_no % logging_steps == 0:
+        if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_train_loss/total_train_data,
                              lr=scheduler.get_last_lr()[0])
+            topk_accs = calculate_accuracy(total_train_logits,
+                                           total_train_target_token_ids,
+                                           top_ks=top_ks,
+                                           ignore_index=-100)
             
-        if b_no % 1000 == 0:
+        if b_no % save_steps == 0:
             save_model(model,
                        epoch,
                        os.path.join(save_dir, f"{model_name}_latest.pt"),
                        optimizer,
                        scheduler,
                        loss)
-            
-    return total_train_loss/total_train_data
+    topk_accs = calculate_accuracy(total_train_logits,
+                                   total_train_target_token_ids,
+                                   top_ks=top_ks,
+                                   ignore_index=-100)           
+    return total_train_loss/total_train_data, topk_accs
 
 def eval_one_epoch(model,
                    test_dataloader,
                    device,
                    epoch,
                    logging_steps=100,
-                   is_fp16=False):
+                   is_fp16=False,
+                   top_ks=[1, 5, 10]):
     model.eval()
     loop = tqdm(test_dataloader,
                 desc=f"Evaluation Epoch {epoch}",
@@ -100,6 +117,8 @@ def eval_one_epoch(model,
                 total=len(test_dataloader))
     total_test_loss = 0
     total_test_data = 0
+    total_test_logits = []
+    total_test_target_token_ids = []
     for b_no, batch in enumerate(loop):
         token_ids = batch['token_ids'].to(device)
         mask_ids = batch['mask_ids'].to(device)
@@ -121,10 +140,18 @@ def eval_one_epoch(model,
                 loss = outputs.loss
         total_test_loss += loss.item() * token_ids.shape[0]
         total_test_data += token_ids.shape[0]
+        total_test_logits.append(outputs.logits.detach().cpu().reshape(-1,
+                                                                       outputs.logits.shape[-1]))
+        total_test_target_token_ids.append(target_token_ids.detach().cpu().reshape(-1))
 
-        if b_no % logging_steps == 0:
+        if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_test_loss/total_test_data)
-    return total_test_loss/total_test_data
+    topk_accs = calculate_accuracy(total_test_logits,
+                                   total_test_target_token_ids,
+                                   top_ks=top_ks,
+                                   ignore_index=-100)
+    
+    return total_test_loss/total_test_data, topk_accs
 
 def save_model(model, 
                epoch, 
@@ -138,6 +165,23 @@ def save_model(model,
                  'scheduler_state_dict': scheduler.state_dict(),
                  'loss': loss}
     torch.save(save_dict, save_path)
+
+def calculate_accuracy(logits,
+                       target_token_ids,
+                       top_ks,
+                       ignore_index):
+    logits = logits.reshape(-1, logits.shape[-1]) if type(logits) == torch.Tensor else torch.cat(logits, dim=0).reshape(-1, logits[0].shape[-1])
+    target_token_ids = target_token_ids.reshape(-1) if type(target_token_ids) == torch.Tensor else torch.cat(target_token_ids, dim=0).reshape(-1)
+    top_k_accs = []
+    for top_k in top_ks:
+        acc = multiclass_accuracy(logits,
+                                  target_token_ids,
+                                  top_k=top_k,
+                                  ignore_index=ignore_index,
+                                  average='macro',
+                                  num_classes=logits.shape[-1])
+        top_k_accs.append(acc)
+    return top_k_accs
 
 def main():
     args = argparse.ArgumentParser()
@@ -155,7 +199,9 @@ def main():
     config_model = config['model']
     config_training = config['training']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+    wandb.init(project=config['project_name'],
+               config=config)
+
     tokenizer = MOFTokenizerGPT(vocab_file=config['data']['vocab_path'],
                                 add_special_tokens=config_tokenizer['add_special_tokens'],
                                 truncation=config_tokenizer['truncation'],
@@ -243,43 +289,52 @@ def main():
         os.makedirs(config['training']['save_dir'])
 
     min_test_loss = np.inf
-
+    top_ks = config_training['top_ks']
 
     # training
     for epoch in range(config_training['epochs']):
         # training
-        train_loss = train_one_epoch(model,
-                                     train_dataloader,
-                                     optimizer,
-                                     scheduler,
-                                     device,
-                                     epoch,
-                                     is_fp16=config_training['fp16'],
-                                     logging_steps=config_training['logging_steps'],
-                                     gradient_accumulation_steps=config_training['optimizer']['gradient_accumulation_steps'],
-                                     scaler=scaler,
-                                     model_name=config['model']['model_name'],
-                                     save_dir=config['training']['save_dir'])
+        train_loss, train_topks = train_one_epoch(model,
+                                                  train_dataloader,
+                                                  optimizer,
+                                                  scheduler,
+                                                  device,
+                                                  epoch,
+                                                  is_fp16=config_training['fp16'],
+                                                  logging_steps=config_training['logging_steps'],
+                                                  gradient_accumulation_steps=config_training['optimizer']['gradient_accumulation_steps'],
+                                                  scaler=scaler,
+                                                  model_name=config['model']['model_name'],
+                                                  save_dir=config['training']['save_dir'],
+                                                  top_ks=top_ks,
+                                                  save_steps=config_training['save_steps'])
 
         # evaluation
-        test_loss = eval_one_epoch(model,
-                                   test_dataloader,
-                                   device,
-                                   epoch,
-                                   logging_steps=config_training['logging_steps'],
-                                   is_fp16=config_training['fp16'])
+        test_loss, test_topks = eval_one_epoch(model,
+                                               test_dataloader,
+                                               device,
+                                               epoch,
+                                               logging_steps=config_training['logging_steps'],
+                                               is_fp16=config_training['fp16'],
+                                               top_ks=top_ks)
         # save model if test loss is minimum
         if test_loss < min_test_loss:
             min_test_loss = test_loss
             save_model(model,
                        epoch,
-                       os.path.join(config['save_dir'], f"{config['model']['model_name']}_best.pt"),
+                       os.path.join(config['training']['save_dir'], f"{config['model']['model_name']}_best.pt"),
                        optimizer,
                        scheduler,
                        test_loss)
             print(f"Succeed saving model with test loss: {test_loss}")
         print(f"Epoch {epoch} train loss: {train_loss}, test loss: {test_loss}")
-        break   
+        for top_k, train_acc, test_acc in zip(top_ks, train_topks, test_topks):
+            print(f"top_{top_k}_acc for train and test: {train_acc}, {test_acc}")
+            wandb.log({f"epoch_top_{top_k}_acc_train": train_acc,
+                       f"epoch_top_{top_k}_acc_test": test_acc,
+                       "epoch_train_loss": train_loss,
+                       "epoch_test_loss": test_loss,
+                       "epoch": epoch})
     return
 
 
