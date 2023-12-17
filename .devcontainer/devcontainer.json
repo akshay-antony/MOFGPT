@@ -25,5 +25,5 @@
         }
     },
     "remoteUser": "root",
-    "postCreateCommand": "pip install -r ./.devcontainer/requirements.txt && chmod -R 777 /MOFGPT"
+    "postCreateCommand": "pip install -r ./.devcontainer/requirements.txt && chmod -R 777 /MOFGPT && cd /MOFGPT"
 }

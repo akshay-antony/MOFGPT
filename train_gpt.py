@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from dataset.dataset_gpt_1 import MOF_ID_Dataset
+from dataset.dataset_gpt import MOF_ID_Dataset
 from tokenizer.mof_tokenizer import MOFTokenizer
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
 from utils.split_csv import split_csv
