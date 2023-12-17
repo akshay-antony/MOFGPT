@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from dataset.dataset_finetune_transformer import MOF_ID_Dataset
+from dataset.dataset_gpt_1 import MOF_ID_Dataset
 from tokenizer.mof_tokenizer import MOFTokenizer
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
 from utils.split_csv import split_csv
@@ -15,8 +15,129 @@ from transformers import GPT2Config, \
                          GPT2LMHeadModel, \
                          LlamaConfig, \
                          LlamaForCausalLM
-from transformers import get_constant_schedule_with_warmup
+from transformers import get_cosine_schedule_with_warmup
+from torch.cuda.amp import autocast, GradScaler
 
+
+def train_one_epoch(model,
+                    train_dataloader,
+                    optimizer,
+                    scheduler,
+                    device,
+                    epoch,
+                    is_fp16,
+                    logging_steps,
+                    gradient_accumulation_steps,
+                    scaler,
+                    model_name,
+                    save_dir):
+    model.train()
+    loop = tqdm(train_dataloader,
+                desc=f"Training Epoch {epoch}",
+                colour='green',
+                total=len(train_dataloader))
+    total_train_loss = 0
+    total_train_data = 0
+    optimizer.zero_grad()
+
+    for b_no, batch in enumerate(loop):
+        token_ids = batch['token_ids'].to(device)
+        mask_ids = batch['mask_ids'].to(device)
+        target_token_ids = batch['target_token_ids'].to(device)
+        
+        if is_fp16:
+            with autocast():
+                outputs = model(input_ids=token_ids,
+                                attention_mask=mask_ids,
+                                labels=target_token_ids,
+                                use_cache=True)
+                loss = outputs.loss
+                scaler.scale(loss).backward()
+        else:
+            outputs = model(input_ids=token_ids,
+                            attention_mask=mask_ids,
+                            labels=target_token_ids,
+                            use_cache=True)
+            loss = outputs.loss
+            loss.backward()
+
+        total_train_loss += loss.item() * token_ids.shape[0]
+        total_train_data += token_ids.shape[0]
+
+        if b_no % gradient_accumulation_steps == 0:
+            if is_fp16:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+            optimizer.zero_grad()
+            scheduler.step()
+
+        if b_no % logging_steps == 0:
+            loop.set_postfix(loss=total_train_loss/total_train_data,
+                             lr=scheduler.get_last_lr()[0])
+            
+        if b_no % 1000 == 0:
+            save_model(model,
+                       epoch,
+                       os.path.join(save_dir, f"{model_name}_latest.pt"),
+                       optimizer,
+                       scheduler,
+                       loss)
+            
+    return total_train_loss/total_train_data
+
+def eval_one_epoch(model,
+                   test_dataloader,
+                   device,
+                   epoch,
+                   logging_steps=100,
+                   is_fp16=False):
+    model.eval()
+    loop = tqdm(test_dataloader,
+                desc=f"Evaluation Epoch {epoch}",
+                colour='green',
+                total=len(test_dataloader))
+    total_test_loss = 0
+    total_test_data = 0
+    for b_no, batch in enumerate(loop):
+        token_ids = batch['token_ids'].to(device)
+        mask_ids = batch['mask_ids'].to(device)
+        target_token_ids = batch['target_token_ids'].to(device)
+        
+        with torch.no_grad():
+            if is_fp16:
+                with autocast():
+                    outputs = model(input_ids=token_ids,
+                                    attention_mask=mask_ids,
+                                    labels=target_token_ids,
+                                    use_cache=True)
+                    loss = outputs.loss
+            else:
+                outputs = model(input_ids=token_ids,
+                                attention_mask=mask_ids,
+                                labels=target_token_ids,
+                                use_cache=True)
+                loss = outputs.loss
+        total_test_loss += loss.item() * token_ids.shape[0]
+        total_test_data += token_ids.shape[0]
+
+        if b_no % logging_steps == 0:
+            loop.set_postfix(loss=total_test_loss/total_test_data)
+    return total_test_loss/total_test_data
+
+def save_model(model, 
+               epoch, 
+               save_path,
+               optimizer,
+               scheduler,
+               loss):
+    save_dict = {'epoch': epoch,
+                 'model_state_dict': model.state_dict(),
+                 'optimizer_state_dict': optimizer.state_dict(),
+                 'scheduler_state_dict': scheduler.state_dict(),
+                 'loss': loss}
+    torch.save(save_dict, save_path)
 
 def main():
     args = argparse.ArgumentParser()
@@ -47,8 +168,6 @@ def main():
 
     config_model['vocab_size'] = tokenizer.vocab_size
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
-    print(f"tokenizer vocab dict: {tokenizer.get_vocab()}")
-
 
     # return
     csv_filenames = []
@@ -78,22 +197,6 @@ def main():
                                  shuffle=True, 
                                  num_workers=config['data']['num_workers'],
                                  collate_fn=test_dataset.collate_fn)
-    # testing batch loading
-    for b_no, batch in enumerate(train_dataloader):
-        token_ids = batch['token_ids']
-        mask_ids = batch['mask_ids']
-        target_token_ids = batch['target_token_ids']
-        label = batch['label']
-        print(f"token_ids shape: {token_ids.shape}, mask_ids shape: {mask_ids.shape}, label shape: {label.shape}")
-        print(token_ids[0])
-        print(mask_ids[0])
-        eos_token_pos = torch.where(token_ids[0] == tokenizer.eos_token_id)[0]
-        num_non_masked_tokens = torch.sum(mask_ids[0])
-        print(f"eos token pos: {eos_token_pos}")
-        print(f"num_non_masked_tokens: {num_non_masked_tokens}")
-        print(f"target_token_ids: {target_token_ids[0]}")
-        if b_no >= 2:
-            break
 
     # Model config
     # adding special token ids to model config
@@ -127,44 +230,58 @@ def main():
                           weight_decay=config_training['optimizer']['weight_decay'])
     # scheduler
     if config_training['scheduler']['type'] == 'cosine':
-        num_training_steps = (len(train_dataloader) / config_training['gradient_accumulation_steps']) * config_training['num_epochs']
+        num_training_steps = (len(train_dataloader) / config_training['optimizer']['gradient_accumulation_steps']) * config_training['epochs']
         num_warmup_steps = int(num_training_steps * config_training['scheduler']['warmup_ratio'])
-        scheduler = get_constant_schedule_with_warmup(optimizer,
+        scheduler = get_cosine_schedule_with_warmup(optimizer,
                                                       num_warmup_steps=num_warmup_steps,
                                                       num_training_steps=num_training_steps)
         print(f"created cosine scheduler with num_training_steps: {num_training_steps}, num_warmup_steps: {num_warmup_steps}")
+    scaler = GradScaler() if config_training['fp16'] else None
+
+    # making save dir
+    if not os.path.exists(config['training']['save_dir']):
+        os.makedirs(config['training']['save_dir'])
+
+    min_test_loss = np.inf
+
+
     # training
-    for epoch in range(config_training['num_epochs']):
-        loop = tqdm(train_dataloader,
-                    desc=f"Epoch {epoch}",
-                    colour='green',
-                    total=len(train_dataloader))
-        for b_no, batch in enumerate(loop):
-            token_ids = batch['token_ids'].to(device)
-            mask_ids = batch['mask_ids'].to(device)
-            target_token_ids = batch['target_token_ids'].to(device)
-            label = batch['label'].to(device)
-            outputs = model(input_ids=token_ids,
-                            attention_mask=mask_ids,
-                            labels=target_token_ids,
-                            use_cache=config_model['use_cache'])
+    for epoch in range(config_training['epochs']):
+        # training
+        train_loss = train_one_epoch(model,
+                                     train_dataloader,
+                                     optimizer,
+                                     scheduler,
+                                     device,
+                                     epoch,
+                                     is_fp16=config_training['fp16'],
+                                     logging_steps=config_training['logging_steps'],
+                                     gradient_accumulation_steps=config_training['optimizer']['gradient_accumulation_steps'],
+                                     scaler=scaler,
+                                     model_name=config['model']['model_name'],
+                                     save_dir=config['training']['save_dir'])
+
+        # evaluation
+        test_loss = eval_one_epoch(model,
+                                   test_dataloader,
+                                   device,
+                                   epoch,
+                                   logging_steps=config_training['logging_steps'],
+                                   is_fp16=config_training['fp16'])
+        # save model if test loss is minimum
+        if test_loss < min_test_loss:
+            min_test_loss = test_loss
+            save_model(model,
+                       epoch,
+                       os.path.join(config['save_dir'], f"{config['model']['model_name']}_best.pt"),
+                       optimizer,
+                       scheduler,
+                       test_loss)
+            print(f"Succeed saving model with test loss: {test_loss}")
+        print(f"Epoch {epoch} train loss: {train_loss}, test loss: {test_loss}")
+        break   
     return
 
-    # setting model config
-    print(f"Voab size: {tokenizer.vocab_size}")
-    print(f"tokens: {list(tokenizer.get_vocab().keys())}")
-    model_config = GPT2Config(n_positions=config['data']['max_seq_len'])
-    model, loading_info = GPT2LMHeadModel.from_pretrained(config['model']['pretrained_model_name'],
-                                                          config=model_config,
-                                                          ignore_mismatched_sizes=True,
-                                                          output_loading_info=True)
-    print(f"Missing keys: {loading_info['missing_keys']}")
-    print(f"Unexpected keys: {loading_info['unexpected_keys']}")
-    print(f"Error keys: {loading_info}")
-    print(f"eos token id: {tokenizer.eos_token_id}")
- 
-    # for name, param in model.named_parameters():
-    #     print(name, param.shape)
 
 if __name__ == "__main__":
     main()

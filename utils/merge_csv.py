@@ -5,7 +5,7 @@ import csv
 import random
 import sys
 sys.path.append("../")
-from dataset.dataset_finetune_transformer import MOF_ID_Dataset
+from dataset.dataset_gpt_1 import MOF_ID_Dataset
 from tokenizer.mof_tokenizer import MOFTokenizer
 
 

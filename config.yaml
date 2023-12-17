@@ -6,7 +6,7 @@ data:
     # - ./'benchmark_datasets/Boyd&Woo/mofid/'
   vocab_path: "./tokenizer/vocab_with_eos.txt"
   train_test_ratio: 0.8
-  batch_size: 32
+  batch_size: 4
   num_workers: 4
   ignore_index: -100
   tokenizer:
@@ -20,7 +20,7 @@ data:
     truncation: True
 
 model:
-  name: "llama2"
+  model_name: "llama2"
   pretrained_model_name: "llama2"
   hidden_size: 1024
   intermediate_size: 2048
@@ -38,9 +38,9 @@ model:
 training:
   device: "cuda"
   epochs: 10
-  use_mixed_precision: True
+  fp16: True
   optimizer:
-    lr: 1e-4
+    lr: 0.001
     type: "AdamW"
     weight_decay: 0.001
     gradient_accumulation_steps: 1
@@ -50,7 +50,7 @@ training:
   logging_steps: 100
   eval_steps: 1000
   save_steps: 1000
-  
+  save_dir: "./saved_models/"
 
 
 
