@@ -144,13 +144,7 @@ def eval_one_epoch(model,
                 loss = outputs.loss
         total_test_loss += loss.item() * token_ids.shape[0]
         total_test_data += token_ids.shape[0]
-        curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
-                                                                                  outputs.logits.shape[-1]),
-                                            target_token_ids.detach().cpu().reshape(-1),    
-                                            top_ks=top_ks,
-                                            ignore_index=-100)
-        for top_no, topk_acc in enumerate(curr_topk_accs):
-            total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
+   
 
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_test_loss/total_test_data)
