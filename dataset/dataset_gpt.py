@@ -2,19 +2,13 @@ from __future__ import print_function, division
 
 import csv
 import functools
-import  json
-#import  you
-import  random
-import warnings
 import math
 import  numpy  as  np
 import torch
 import os
-from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.dataloader import default_collate
-from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm import tqdm
 import multiprocessing
+from torch.utils.data import Dataset
 
 
 class MOF_ID_Dataset(Dataset):
@@ -25,6 +19,7 @@ class MOF_ID_Dataset(Dataset):
 								 ignore_index,
 								 use_multiprocessing):
 						self.data = data
+						self.tokenizer = tokenizer
 						self.use_multiprocessing = use_multiprocessing
 				#     self.data = data[:int(len(data)*use_ratio)]
 						self.mofid = self.data[:, 0].astype(str)
@@ -35,7 +30,6 @@ class MOF_ID_Dataset(Dataset):
 						print("Tokenizing finished")
 						print(f"Number of mofs: {len(self.tokens)}")
 						self.label = self.data[:, 1].astype(float)
-						self.tokenizer = tokenizer
 						self.ignore_index = ignore_index
 
 		def __len__(self):
