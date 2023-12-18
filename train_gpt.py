@@ -94,8 +94,8 @@ def train_one_epoch(model,
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_train_loss/total_train_data,
                              lr=scheduler.get_last_lr()[0])
-            for top_no, top_k in enumerate(top_ks):
-                print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
+            # for top_no, top_k in enumerate(top_ks):
+            #     print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
             
         if b_no % save_steps == 0:
             save_model(model,
