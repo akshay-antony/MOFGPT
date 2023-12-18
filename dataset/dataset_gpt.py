@@ -30,12 +30,7 @@ class MOF_ID_Dataset(Dataset):
 						self.mofid = self.data[:, 0].astype(str)
 				#     self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
 						self.tokens = []
-						loop = tqdm(range(len(self.mofid)), 
-												desc='Tokenizing', 
-												colour='green')
-						for i in loop:
-								curr_token = tokenizer.encode(self.mofid[i])
-								self.tokens.append(curr_token)
+						self.encode_all()
 				#     self.tokens = np.array(self.tokens)
 						print("Tokenizing finished")
 						print(f"Number of mofs: {len(self.tokens)}")
