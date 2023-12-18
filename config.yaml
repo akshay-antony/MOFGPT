@@ -3,8 +3,8 @@ project_name: "llama2_mof_gpt"
 data:
   csv_folder_paths: 
     - './benchmark_datasets/QMOF/mofid/'
-    # - ./'benchmark_datasets/hMOF/mofid/'
-    # - ./'benchmark_datasets/Boyd&Woo/mofid/'
+    # - './benchmark_datasets/hMOF/mofid/'
+    # - './benchmark_datasets/Boyd&Woo/mofid/'
   vocab_path: "./tokenizer/vocab_with_eos.txt"
   train_test_ratio: 0.8
   batch_size: 4
@@ -27,7 +27,7 @@ model:
   intermediate_size: 2048
   num_hidden_layers: 8
   num_attention_heads: 8
-  num_key_value_heads: 4 # for grouped query attention
+  num_key_value_heads: 8 # for grouped query attention
   use_cache: False
   rope_theta: 10000.0 # default value
   hidden_act: "silu" # default value
@@ -49,8 +49,8 @@ training:
   scheduler:
     type: "cosine"
     warmup_ratio: 0.03
-  logging_steps: 100
-  save_steps: 1000
+  logging_ratio: 0.05
+  save_ratio: 0.5
   save_dir: "./saved_models/"
 
 

@@ -223,6 +223,7 @@ def main():
     csv_filenames = []
     for csv_folder_path in config['data']['csv_folder_paths']:
         csv_filenames.extend(glob.glob(csv_folder_path + '*.csv'))
+
     train_data_np, \
     test_data_np = split_csv(csv_filenames,
                              train_test_ratio = config['data']['train_test_ratio'],
@@ -294,6 +295,11 @@ def main():
 
     min_test_loss = np.inf
     top_ks = config_training['top_ks']
+
+    # calculating logging and save steps from ratios
+    config_training['logging_steps'] = int(len(train_dataloader) * config_training['logging_ratio'])
+    config_training['save_steps'] = int(len(train_dataloader) * config_training['save_ratio'])
+    print(f"logging steps: {config_training['logging_steps']}, save steps: {config_training['save_steps']}")
 
     # training
     for epoch in range(config_training['epochs']):
