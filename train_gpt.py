@@ -34,7 +34,8 @@ def train_one_epoch(model,
                     model_name,
                     save_dir,
                     top_ks,
-                    save_steps=1000):
+                    save_steps,
+                    config_model):
     model.train()
     loop = tqdm(train_dataloader,
                 desc=f"Training Epoch {epoch}",
@@ -42,8 +43,7 @@ def train_one_epoch(model,
                 total=len(train_dataloader))
     total_train_loss = 0
     total_train_data = 0
-    total_train_logits = []
-    total_train_target_token_ids = []
+    total_correct_topks = [0 for _ in top_ks]
     optimizer.zero_grad()
 
     for b_no, batch in enumerate(loop):
@@ -56,7 +56,10 @@ def train_one_epoch(model,
                 outputs = model(input_ids=token_ids,
                                 attention_mask=mask_ids,
                                 labels=target_token_ids,
-                                use_cache=True)
+                                use_cache=config_model['use_cache'],
+                                return_dict=config_model['return_dict'],
+                                output_attentions=config_model['output_attentions'],
+                                output_hidden_states=config_model['output_hidden_states'])
                 loss = outputs.loss
                 scaler.scale(loss).backward()
         else:
@@ -67,13 +70,18 @@ def train_one_epoch(model,
             loss = outputs.loss
             loss.backward()
 
-        total_train_logits.append(outputs.logits.detach().cpu().reshape(-1, 
-                                                                        outputs.logits.shape[-1]))
-        total_train_target_token_ids.append(target_token_ids.detach().cpu().reshape(-1))
+        curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
+                                                                                  outputs.logits.shape[-1]),
+                                            target_token_ids.detach().cpu().reshape(-1),    
+                                            top_ks=top_ks,
+                                            ignore_index=-100)
+        for top_no, topk_acc in enumerate(curr_topk_accs):
+            total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
+        
         total_train_loss += loss.item() * token_ids.shape[0]
         total_train_data += token_ids.shape[0]
 
-        if b_no % gradient_accumulation_steps and b_no != 0:
+        if b_no % gradient_accumulation_steps == 0 and b_no != 0:
             if is_fp16:
                 scaler.step(optimizer)
                 scaler.update()
@@ -81,14 +89,13 @@ def train_one_epoch(model,
                 optimizer.step()
             optimizer.zero_grad()
             scheduler.step()
+        
 
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_train_loss/total_train_data,
                              lr=scheduler.get_last_lr()[0])
-            topk_accs = calculate_accuracy(total_train_logits,
-                                           total_train_target_token_ids,
-                                           top_ks=top_ks,
-                                           ignore_index=-100)
+            for top_no, top_k in enumerate(top_ks):
+                print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
             
         if b_no % save_steps == 0:
             save_model(model,
@@ -97,11 +104,8 @@ def train_one_epoch(model,
                        optimizer,
                        scheduler,
                        loss)
-    topk_accs = calculate_accuracy(total_train_logits,
-                                   total_train_target_token_ids,
-                                   top_ks=top_ks,
-                                   ignore_index=-100)           
-    return total_train_loss/total_train_data, topk_accs
+    total_topk_accs = [total_correct_topk/total_train_data for total_correct_topk in total_correct_topks]          
+    return total_train_loss/total_train_data, total_topk_accs
 
 def eval_one_epoch(model,
                    test_dataloader,
@@ -117,8 +121,7 @@ def eval_one_epoch(model,
                 total=len(test_dataloader))
     total_test_loss = 0
     total_test_data = 0
-    total_test_logits = []
-    total_test_target_token_ids = []
+    total_correct_topks = [0 for _ in top_ks]
     for b_no, batch in enumerate(loop):
         token_ids = batch['token_ids'].to(device)
         mask_ids = batch['mask_ids'].to(device)
@@ -140,18 +143,19 @@ def eval_one_epoch(model,
                 loss = outputs.loss
         total_test_loss += loss.item() * token_ids.shape[0]
         total_test_data += token_ids.shape[0]
-        total_test_logits.append(outputs.logits.detach().cpu().reshape(-1,
-                                                                       outputs.logits.shape[-1]))
-        total_test_target_token_ids.append(target_token_ids.detach().cpu().reshape(-1))
+        curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
+                                                                                  outputs.logits.shape[-1]),
+                                            target_token_ids.detach().cpu().reshape(-1),    
+                                            top_ks=top_ks,
+                                            ignore_index=-100)
+        for top_no, topk_acc in enumerate(curr_topk_accs):
+            total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
 
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_test_loss/total_test_data)
-    topk_accs = calculate_accuracy(total_test_logits,
-                                   total_test_target_token_ids,
-                                   top_ks=top_ks,
-                                   ignore_index=-100)
     
-    return total_test_loss/total_test_data, topk_accs
+    total_topk_accs = [total_correct_topk/total_test_data for total_correct_topk in total_correct_topks]    
+    return total_test_loss/total_test_data, total_topk_accs
 
 def save_model(model, 
                epoch, 
@@ -307,7 +311,8 @@ def main():
                                                   model_name=config['model']['model_name'],
                                                   save_dir=config['training']['save_dir'],
                                                   top_ks=top_ks,
-                                                  save_steps=config_training['save_steps'])
+                                                  save_steps=config_training['save_steps'],
+                                                  config_model=config_model)
 
         # evaluation
         test_loss, test_topks = eval_one_epoch(model,
