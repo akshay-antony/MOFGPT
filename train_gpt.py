@@ -70,13 +70,13 @@ def train_one_epoch(model,
             loss = outputs.loss
             loss.backward()
 
-        curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
-                                                                                  outputs.logits.shape[-1]),
-                                            target_token_ids.detach().cpu().reshape(-1),    
-                                            top_ks=top_ks,
-                                            ignore_index=-100)
-        for top_no, topk_acc in enumerate(curr_topk_accs):
-            total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
+        # curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
+        #                                                                           outputs.logits.shape[-1]),
+        #                                     target_token_ids.detach().cpu().reshape(-1),    
+        #                                     top_ks=top_ks,
+        #                                     ignore_index=-100)
+        # for top_no, topk_acc in enumerate(curr_topk_accs):
+        #     total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
         
         total_train_loss += loss.item() * token_ids.shape[0]
         total_train_data += token_ids.shape[0]
@@ -94,6 +94,7 @@ def train_one_epoch(model,
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_train_loss/total_train_data,
                              lr=scheduler.get_last_lr()[0])
+            break
             # for top_no, top_k in enumerate(top_ks):
             #     print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
             
