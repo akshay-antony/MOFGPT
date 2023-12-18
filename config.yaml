@@ -3,13 +3,14 @@ project_name: "llama2_mof_gpt"
 data:
   csv_folder_paths: 
     - './benchmark_datasets/QMOF/mofid/'
-    - './benchmark_datasets/hMOF/mofid/'
-    - './benchmark_datasets/Boyd&Woo/mofid/'
+    # - './benchmark_datasets/hMOF/mofid/'
+    # - './benchmark_datasets/Boyd&Woo/mofid/'
   vocab_path: "./tokenizer/vocab_with_eos.txt"
   train_test_ratio: 0.8
-  batch_size: 4
-  num_workers: 4
+  batch_size: 32 #4
+  num_workers: 8 #1
   ignore_index: -100
+  use_multiprocessing: True
   tokenizer:
     max_seq_len: 512
     pad_token: '[PAD]'

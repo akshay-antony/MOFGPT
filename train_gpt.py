@@ -233,11 +233,13 @@ def main():
     print("For train dataset:")
     train_dataset = MOF_ID_Dataset(train_data_np, 
                                    tokenizer,
-                                   config_data['ignore_index'])
+                                   config_data['ignore_index'],
+                                   use_multiprocessing=config_data['use_multiprocessing'])
     print("For test dataset:")
     test_dataset = MOF_ID_Dataset(test_data_np, 
                                   tokenizer,
-                                  config_data['ignore_index'])
+                                  config_data['ignore_index'],
+                                  use_multiprocessing=config_data['use_multiprocessing'])
     # return
     train_dataloader = DataLoader(train_dataset, 
                                   batch_size=config['data']['batch_size'], 
