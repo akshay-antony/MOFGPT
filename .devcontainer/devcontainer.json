@@ -3,6 +3,9 @@
     "image": "nvcr.io/nvidia/pytorch:22.02-py3",
     "workspaceFolder": "/MOFGPT",
     "workspaceMount": "source=${localWorkspaceFolder},target=/MOFGPT,type=bind,consistency=cached",
+    "mounts": [
+        "source=${localWorkspaceFolder}/.devcontainer/add_terminal_color.sh,target=/tmp/add_terminal_color.sh,type=bind,consistency=bind"
+    ],
     "runArgs": [
         "--env", "DISPLAY:${localEnv:DISPLAY}",
         "--volume", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
@@ -24,6 +27,9 @@
             ]
         }
     },
+    "containerEnv": {
+        "TERM": "xterm-256color"
+    },
     "remoteUser": "root",
-    "postCreateCommand": "pip install -r ./.devcontainer/requirements.txt && chmod -R 777 /MOFGPT && cd /MOFGPT"
+    "postCreateCommand": "pip install -r ./.devcontainer/requirements.txt && chmod -R 777 /MOFGPT && bash /tmp/add_terminal_color.sh && source ~/.bashrc"
 }
