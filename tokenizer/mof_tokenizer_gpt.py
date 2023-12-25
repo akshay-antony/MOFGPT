@@ -102,6 +102,19 @@ class MOFTokenizerGPT(object):
         split_tokens = smiles_tokens + ['&&'] + topo_tokens
         return split_tokens
     
+    def tokenize_smiles(self, text):
+        """
+          Tokenize str into list of tokens (only SMILES)
+        Parameters
+        ----------
+        inputs:
+            text: str, Input string to tokenize
+        Returns:
+            List of tokens
+        """
+        smiles_tokens = [token for token in self.basic_tokenizer.tokenize(text)]
+        return smiles_tokens
+
     def convert_token_to_id(self, token):
         """
         Converts a token (str) in an id using the vocab.
@@ -145,7 +158,7 @@ class MOFTokenizerGPT(object):
     
     def convert_ids_to_tokens(self, ids: List[int]):
         """
-        Converts a token (str) in an id using the vocab.
+        Converts an id to str using the vocab.
         Parameters
         ----------
         ids: List[int]
@@ -243,7 +256,7 @@ class MOFTokenizerGPT(object):
       List[int]: List of ids (integer) corresponding to the tokenized text.
       """
       tokens = self.tokenize(text)
-      if self.truncation:
+      if self.truncation and len(tokens) > self.max_len:
          if self.add_special_tokens:
             tokens = tokens[:self.max_len-2] # -2 for bos and eos
          else:

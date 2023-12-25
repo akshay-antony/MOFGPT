@@ -3,7 +3,7 @@ from __future__ import print_function, division
 import csv
 import functools
 import math
-import  numpy  as  np
+import numpy as np
 import torch
 import os
 from tqdm import tqdm
@@ -12,111 +12,116 @@ from torch.utils.data import Dataset
 
 
 class MOF_ID_Dataset(Dataset):
-		'Characterizes a dataset for PyTorch'
-		def __init__(self, 
-								 data, 
-								 tokenizer,
-								 ignore_index,
-								 use_multiprocessing):
-						self.data = data
-						self.tokenizer = tokenizer
-						self.use_multiprocessing = use_multiprocessing
-				#     self.data = data[:int(len(data)*use_ratio)]
-						self.mofid = self.data[:, 0].astype(str)
-				#     self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
-						self.tokens = []
-						self.encode_all()
-				#     self.tokens = np.array(self.tokens)
-						print("Tokenizing finished")
-						print(f"Number of mofs: {len(self.tokens)}")
-						self.label = self.data[:, 1].astype(float)
-						self.ignore_index = ignore_index
+    'Characterizes a dataset for PyTorch'
 
-		def __len__(self):
-						return len(self.label)
+    def __init__(self,
+                 data,
+                 tokenizer,
+                 ignore_index,
+                 use_multiprocessing):
+        self.data = data
+        self.tokenizer = tokenizer
+        self.use_multiprocessing = use_multiprocessing
+        #     self.data = data[:int(len(data)*use_ratio)]
+        self.mofid = self.data[:, 0].astype(str)
+        #     self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
+        self.tokens = []
+        self.encode_all()
+        #     self.tokens = np.array(self.tokens)
+        print("Tokenizing finished")
+        print(f"Number of mofs: {len(self.tokens)}")
+        self.label = self.data[:, 1].astype(float)
+        self.ignore_index = ignore_index
 
-		def encode_all(self):
-				if self.use_multiprocessing:
-					with multiprocessing.Pool() as pool:
-						results = list(tqdm(pool.imap(self.tokenizer.encode, 
-																					self.mofid), 
-																total=len(self.mofid),
-																desc='Tokenizing', 
-																colour='green'))
-					self.tokens = results
-				else:
-					self.tokens = [self.tokenizer.encode(i) for i in tqdm(self.mofid, 
-																																desc='Tokenizing', 
-																																colour='green',
-																																total=len(self.mofid))]
+    def __len__(self):
+        return len(self.label)
 
-		@functools.lru_cache(maxsize=None) 
-		def __getitem__(self, index):
-						# Load data and get label
-						token_ids = torch.from_numpy(np.asarray(self.tokens[index]))
-						target_token_ids = token_ids.clone()[1:]
-						mask_ids = torch.ones_like(token_ids)
-						y = torch.from_numpy(np.asarray(self.label[index])).view(-1,1)
+    def encode_all(self):
+        if self.use_multiprocessing:
+            with multiprocessing.Pool() as pool:
+                results = list(tqdm(pool.imap(self.tokenizer.encode,
+                                              self.mofid),
+                                    total=len(self.mofid),
+                                    desc='Tokenizing',
+                                    colour='green'))
+            self.tokens = results
+        else:
+            self.tokens = [self.tokenizer.encode(i) for i in tqdm(self.mofid,
+                                                                  desc='Tokenizing',
+                                                                  colour='green',
+                                                                  total=len(self.mofid))]
 
-						return {'token_ids':token_ids, 
-										'mask_ids':mask_ids, 
-										'target_token_ids':target_token_ids,
-										'label':y.float()}
-		
-		def collate_fn(self, data):
-				"""
-				add padding to the batch of data
-				"""
-				padded_tokens, \
-				padded_masks, \
-				target_tokens = self.tokenizer.pad_batched_tokens([i['token_ids'] for i in data],
-																													[i['mask_ids'] for i in data],
-																													[i['target_token_ids'] for i in data])
-				labels = torch.stack([i['label'] for i in data])
-				return {"token_ids":padded_tokens,
-								"mask_ids":padded_masks,
-								"target_token_ids":target_tokens,
-								"label":labels}
+    @functools.lru_cache(maxsize=None)
+    def __getitem__(self, index):
+        # Load data and get label
+        token_ids = torch.from_numpy(np.asarray(self.tokens[index]))
+        target_token_ids = token_ids.clone()[1:]
+        mask_ids = torch.ones_like(token_ids)
+        y = torch.from_numpy(np.asarray(self.label[index])).view(-1, 1)
+
+        return {'token_ids': token_ids,
+                'mask_ids': mask_ids,
+                'target_token_ids': target_token_ids,
+                'label': y.float()}
+
+    def collate_fn(self, data):
+        """
+        add padding to the batch of data
+        """
+        padded_tokens, \
+            padded_masks, \
+            target_tokens = self.tokenizer.pad_batched_tokens([i['token_ids'] for i in data],
+                                                              [i['mask_ids']
+                                                                  for i in data],
+                                                              [i['target_token_ids'] for i in data])
+        labels = torch.stack([i['label'] for i in data])
+        return {"token_ids": padded_tokens,
+                "mask_ids": padded_masks,
+                "target_token_ids": target_tokens,
+                "label": labels}
 
 
-class MOF_pretrain_Dataset(Dataset):
-		'Characterizes a dataset for PyTorch'
-		def __init__(self, data, tokenizer, use_ratio = 1):
+# class MOF_pretrain_Dataset(Dataset):
+#     'Characterizes a dataset for PyTorch'
 
-						self.data = data[:int(len(data)*use_ratio)]
-						self.mofid = self.data.astype(str)
-						self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
-						self.tokenizer = tokenizer
+#     def __init__(self, data, tokenizer, use_ratio=1):
 
-		def __len__(self):
-						return len(self.mofid)
-						
-		@functools.lru_cache(maxsize=None) 
-		def __getitem__(self, index):
-						# Load data and get label
-						X = torch.from_numpy(np.asarray(self.tokens[index]))
+#         self.data = data[:int(len(data)*use_ratio)]
+#         self.mofid = self.data.astype(str)
+#         self.tokens = np.array([tokenizer.encode(
+#             i, max_length=512, truncation=True, padding='max_length') for i in self.mofid])
+#         self.tokenizer = tokenizer
 
-						return X.type(torch.LongTensor)
+#     def __len__(self):
+#         return len(self.mofid)
+
+#     @functools.lru_cache(maxsize=None)
+#     def __getitem__(self, index):
+#         # Load data and get label
+#         X = torch.from_numpy(np.asarray(self.tokens[index]))
+
+#         return X.type(torch.LongTensor)
 
 
 class MOF_tsne_Dataset(Dataset):
-		'Characterizes a dataset for PyTorch'
-		def __init__(self, data, tokenizer):
-						self.data = data
-						self.mofid = self.data[:, 0].astype(str)
-						self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
-						self.label = self.data[:, 1].astype(float)
+    'Characterizes a dataset for PyTorch'
 
-						self.tokenizer = tokenizer
+    def __init__(self, data, tokenizer):
+        self.data = data
+        self.mofid = self.data[:, 0].astype(str)
+        self.tokens = np.array([tokenizer.encode(
+            i, max_length=512, truncation=True, padding='max_length') for i in self.mofid])
+        self.label = self.data[:, 1].astype(float)
 
-		def __len__(self):
-						return len(self.label)
-						
-		@functools.lru_cache(maxsize=None) 
-		def __getitem__(self, index):
-						# Load data and get label
-						X = torch.from_numpy(np.asarray(self.tokens[index]))
-						y = self.label[index]
-						topo = self.mofid[index].split('&&')[-1].split('.')[0]
-						return X, y, topo
+        self.tokenizer = tokenizer
 
+    def __len__(self):
+        return len(self.label)
+
+    @functools.lru_cache(maxsize=None)
+    def __getitem__(self, index):
+        # Load data and get label
+        X = torch.from_numpy(np.asarray(self.tokens[index]))
+        y = self.label[index]
+        topo = self.mofid[index].split('&&')[-1].split('.')[0]
+        return X, y, topo

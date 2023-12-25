@@ -63,7 +63,7 @@ def main():
     print(f"model.generate_config: {model.generation_config}") 
     # model.generate()
 
-    input_smiles = "[BOS][O-]C(=O)c1cc2c3c(c1)c(N(=O)=O)"
+    input_smiles = "[BOS]"
     token_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize_smiles(input_smiles))
     print(f"token_ids: {token_ids}")
     with torch.no_grad():
@@ -79,7 +79,7 @@ def main():
                                             eos_token_id=tokenizer.eos_token_id,
                                             pad_token_id=tokenizer.pad_token_id,
                                             bos_token_id=tokenizer.bos_token_id,
-                                            use_cache=True,)
+                                            use_cache=False,)
     for i, sequence in enumerate(generated_sequence):
         sequence_list = tokenizer.convert_ids_to_tokens(list(sequence.cpu().numpy().reshape(-1)))
         sequence_str = ''.join(sequence_list).replace("[PAD]", "").replace("[BOS]", "").replace("[MASK]", "").replace("[UNK]", "").strip()
