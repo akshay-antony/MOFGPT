@@ -130,7 +130,7 @@ class MOFTokenizerGPT(object):
     
     def convert_id_to_token(self, index):
         """
-        Converts an index (integer) in a token (str) using the vocab.
+        Converts an index (integer) into a token (str) using the vocab.
         Parameters
         ----------
         index: int

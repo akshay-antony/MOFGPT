@@ -1,3 +1,5 @@
+import sys
+sys.path.append('..')
 import torch
 import yaml
 import os
@@ -184,7 +186,7 @@ def calculate_accuracy(logits,
 def main():
     args = argparse.ArgumentParser()
     args.add_argument("--config_filename", 
-                      default="config.yaml", 
+                      default="../config/config.yaml", 
                       type=str,
                       help="Path to config file")
     args = args.parse_args()

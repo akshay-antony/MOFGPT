@@ -1,0 +1,26 @@
+2023-12-29 02:03:26,779 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Current SDK version is 0.16.1
+2023-12-29 02:03:26,779 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Configure stats pid to 6728
+2023-12-29 02:03:26,779 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Loading settings from /root/.config/wandb/settings
+2023-12-29 02:03:26,779 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Loading settings from /MOFGPT/train/wandb/settings
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Loading settings from environment variables: {}
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Applying setup settings: {'_disable_service': False}
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Inferring run settings from compute environment: {'program_relpath': 'train/train_gpt.py', 'program_abspath': '/MOFGPT/train/train_gpt.py', 'program': 'train_gpt.py'}
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_setup.py:_flush():76] Applying login settings: {'mode': 'offline'}
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:_log_setup():524] Logging user logs to /MOFGPT/train/wandb/offline-run-20231229_020326-v3npgzhq/logs/debug.log
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:_log_setup():525] Logging internal logs to /MOFGPT/train/wandb/offline-run-20231229_020326-v3npgzhq/logs/debug-internal.log
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:init():564] calling init triggers
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:init():571] wandb.init called with sweep_config: {}
+config: {'random_seed': 42, 'project_name': 'llama2_mof_gpt', 'data': {'csv_folder_paths': ['./benchmark_datasets/QMOF/mofid/', './benchmark_datasets/hMOF/mofid/', './benchmark_datasets/Boyd&Woo/mofid/'], 'vocab_path': './tokenizer/vocab_with_eos.txt', 'train_test_ratio': 0.8, 'batch_size': 32, 'num_workers': 8, 'ignore_index': -100, 'use_multiprocessing': False, 'tokenizer': {'max_seq_len': 512, 'pad_token': '[PAD]', 'mask_token': '[MASK]', 'bos_token': '[BOS]', 'eos_token': '[EOS]', 'unk_token': '[UNK]', 'add_special_tokens': True, 'truncation': True}}, 'model': {'model_name': 'llama2', 'pretrained_model_name': 'llama2', 'hidden_size': 1024, 'intermediate_size': 2048, 'num_hidden_layers': 8, 'num_attention_heads': 8, 'num_key_value_heads': 8, 'use_cache': False, 'rope_theta': 10000.0, 'hidden_act': 'silu', 'return_dict': True, 'output_attentions': False, 'output_hidden_states': False}, 'training': {'device': 'cuda', 'epochs': 10, 'fp16': True, 'top_ks': [1, 3, 5], 'optimizer': {'lr': 0.0001, 'type': 'AdamW', 'weight_decay': 0.001, 'gradient_accumulation_steps': 1}, 'scheduler': {'type': 'cosine', 'warmup_ratio': 0.03}, 'logging_ratio': 0.05, 'save_ratio': 0.5, 'save_dir': './saved_models/'}}
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:init():614] starting backend
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [wandb_init.py:init():618] setting up manager
+2023-12-29 02:03:26,780 INFO    MainThread:6728 [backend.py:_multiprocessing_setup():105] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2023-12-29 02:03:26,781 INFO    MainThread:6728 [wandb_init.py:init():624] backend started and connected
+2023-12-29 02:03:26,783 INFO    MainThread:6728 [wandb_init.py:init():716] updated telemetry
+2023-12-29 02:03:26,790 INFO    MainThread:6728 [wandb_init.py:init():749] communicating run to backend with 90.0 second timeout
+2023-12-29 02:03:26,793 INFO    MainThread:6728 [wandb_init.py:init():800] starting run threads in backend
+2023-12-29 02:03:28,105 INFO    MainThread:6728 [wandb_run.py:_console_start():2233] atexit reg
+2023-12-29 02:03:28,105 INFO    MainThread:6728 [wandb_run.py:_redirect():2088] redirect: wrap_raw
+2023-12-29 02:03:28,105 INFO    MainThread:6728 [wandb_run.py:_redirect():2153] Wrapping output streams.
+2023-12-29 02:03:28,105 INFO    MainThread:6728 [wandb_run.py:_redirect():2178] Redirects installed.
+2023-12-29 02:03:28,106 INFO    MainThread:6728 [wandb_init.py:init():841] run started, returning control to user process
+2023-12-29 02:03:29,293 WARNING MsgRouterThr:6728 [router.py:message_loop():77] message_loop has been closed

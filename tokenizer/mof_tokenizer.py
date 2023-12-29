@@ -90,7 +90,7 @@ class MOFTokenizer(BertTokenizer):
             Path to a SMILES character per line vocabulary file.
             Default vocab file is found in deepchem/feat/tests/data/vocab.txt
         """
-
+  
     super().__init__(vocab_file, **kwargs)
     # take into account special tokens in max length
     self.max_len = self.model_max_length

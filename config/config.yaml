@@ -2,10 +2,10 @@ random_seed: 42
 project_name: "llama2_mof_gpt"
 data:
   csv_folder_paths: 
-    - './benchmark_datasets/QMOF/mofid/'
-    # - './benchmark_datasets/hMOF/mofid/'
-    # - './benchmark_datasets/Boyd&Woo/mofid/'
-  vocab_path: "./tokenizer/vocab_with_eos.txt"
+    - '../benchmark_datasets/QMOF/mofid/'
+    # - '../benchmark_datasets/hMOF/mofid/'
+    # - '../benchmark_datasets/Boyd&Woo/mofid/'
+  vocab_path: "../tokenizer/vocab_with_eos.txt"
   train_test_ratio: 0.8
   batch_size: 32 #4
   num_workers: 8 #1
@@ -52,8 +52,41 @@ training:
     warmup_ratio: 0.03
   logging_ratio: 0.05
   save_ratio: 0.5
-  save_dir: "./saved_models/"
+  save_dir: "../saved_models/"
 
+reinforcement_learning:
+  num_samples: 10000
+  training:
+    epochs: 10
+    fp16: True
+    optimizer:
+      lr: 0.0001
+      type: "AdamW"
+      weight_decay: 0.001
+    logging_ratio: 0.05
+    save_ratio: 0.5
+    save_dir: "../saved_models/"
+    model_name: "llama2_rl"
+  sampling:
+    max_seq_len: 512
+    batch_size: 32
+    do_sample: True
+    top_k: 1000
+    top_p: 0.95
+    temperature: 1.0
+    constant_temperature: False
+    temperature_std: 1.0
+    early_stopping: True
+    num_beams: 1
+    num_beam_groups: 1
+  reward:
+    sep_token: "&&"
+    name: "basic_rules"
+    discount_factor: 0.99
+    basic_rules:
+      success_reward: 1.0
+      failure_reward: -2.0
+      median_reward: -1.0
 
 
   
