@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 *.pyo
+wandb/**
+# all wandb directories in all subdirectories
+**/wandb/**
