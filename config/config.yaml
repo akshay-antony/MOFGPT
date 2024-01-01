@@ -57,7 +57,7 @@ training:
 
 reinforcement_learning:
   training:
-    saved_state_dict_filename: "../saved_models/llama2_best.pt"
+    saved_state_dict_filename: "../saved_models/llama2_best2.pt"
     saved_state_dict_url: "https://drive.google.com/file/d/1uuOjMQJc5seEPkak7gRse4N5HSssmhVp/view?usp=sharing"
     num_samples_per_epoch: 2048
     epochs: 10

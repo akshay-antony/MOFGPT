@@ -1,3 +1,4 @@
+from math import e
 import sys
 sys.path.append("../")
 from matplotlib import use
@@ -309,6 +310,14 @@ def main():
     # loading state dict
     if not os.path.exists(rl_config["training"]["saved_state_dict_filename"]):
         print("Downloading saved state dict from gdrive")
+        # check if folder exists
+        folder_path = rl_config["training"]["save_dir"].split("/")[:-1]
+        folder_path = "/".join(folder_path)
+        if not os.path.exists(folder_path):
+            print("Creating folder {}".format(folder_path))
+            os.makedirs(folder_path)
+        else:
+            print("Folder {} exists".format(folder_path))
         gdown.download(rl_config["training"]["saved_state_dict_url"],
                        rl_config["training"]["saved_state_dict_filename"],
                        quiet=False,
