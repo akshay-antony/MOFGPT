@@ -3,7 +3,6 @@ sys.path.append("../")
 from matplotlib import use
 
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
-sys.path.append("../")
 from utils.sample import sample_smiles
 import numpy as np
 import torch
@@ -14,6 +13,8 @@ import argparse
 import yaml
 from transformers import LlamaConfig, LlamaForCausalLM
 import wandb
+import gdown
+import os   
 
 def reward_fn(generated_sequences,
               reward_config,
@@ -306,7 +307,15 @@ def main():
                                   weight_decay=rl_config["training"]["optimizer"]["weight_decay"])
 
     # loading state dict
+    if not os.path.exists(rl_config["training"]["saved_state_dict_filename"]):
+        print("Downloading saved state dict from gdrive")
+        gdown.download(rl_config["training"]["saved_state_dict_url"],
+                       rl_config["training"]["saved_state_dict_filename"],
+                       quiet=False,
+                       fuzzy=True)
+
     saved_dict = torch.load(rl_config["training"]["saved_state_dict_filename"])
+
     if model.load_state_dict(saved_dict["model_state_dict"]):
         print("Model state dict loaded")
 
