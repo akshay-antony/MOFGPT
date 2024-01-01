@@ -211,9 +211,7 @@ def evaluate(model,
              eval_config,
              sampling_config,
              reward_config,
-             model_config,
-             device,
-             ignore_index,):
+             device,):
     """
     Evaluate the model by generating SMILES.
     """
@@ -233,7 +231,20 @@ def evaluate(model,
                                  reward_config=reward_config,
                                  eos_token_id=tokenizer.eos_token_id)[0]
     eval_reward /= len(generated_sequences)
-    return eval_reward
+    sequence_strs = []
+    if eval_config["print_smiles"]:
+        for seq_no, seq in enumerate(generated_sequences):
+            sequence_list = tokenizer.convert_ids_to_tokens(list(seq.cpu().numpy().reshape(-1)))
+            sequence_str = ''.join(sequence_list)
+            sequence_str = sequence_str.replace(tokenizer.pad_token, "")
+            sequence_str = sequence_str.replace(tokenizer.bos_token, "")
+            sequence_str = sequence_str.replace(tokenizer.eos_token, "")
+            sequence_str = sequence_str.replace(tokenizer.mask_token, "")
+            sequence_str = sequence_str.replace(tokenizer.unk_token, "")
+            sequence_str = sequence_str.strip()
+            sequence_strs.append(sequence_str)
+                
+    return eval_reward, sequence_strs
     
 def main():
     parser = argparse.ArgumentParser()
@@ -324,15 +335,18 @@ def main():
         print(f"Train epoch loss: {train_epoch_loss}")
         print(f"Train epoch reward: {train_epoch_reward}")
         if epoch % eval_config["eval_interval"] == 0:
-            eval_reward = evaluate(model=model,
-                                   tokenizer=tokenizer,
-                                   eval_config=eval_config,
-                                   sampling_config=rl_config["sampling"],
-                                   reward_config=rl_config["reward"],
-                                   model_config=rl_model_config,
-                                   device=device,
-                                   ignore_index=config["data"]["ignore_index"],)
+            eval_reward, \
+            seq_strs = evaluate(model=model,
+                                tokenizer=tokenizer,
+                                eval_config=eval_config,
+                                sampling_config=rl_config["sampling"],
+                                reward_config=rl_config["reward"],
+                                device=device)
             print(f"Eval reward: {eval_reward}")
+            print(f"gnerated sequences {len(seq_strs)}")
+            for seq_no, seq_str in enumerate(seq_strs):
+                print(f"sampling {seq_no}: {seq_str}")
+                wandb.log({"generated_sequence": seq_str})
             if eval_reward > best_reward:
                 best_reward = eval_reward
                 save_filename = f"{rl_config['training']['save_dir']}/best_reward_{rl_config['training']['model_name']}.pt"

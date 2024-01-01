@@ -31,7 +31,6 @@ def sample_smiles(model,
      
     generated_sequences = []
     for seq in generated_sequence:
-        generated_sequences.append(seq)
         # print(len(seq))
         eos_token_idx = (seq == tokenizer.eos_token_id).nonzero(as_tuple=True)[0]
         # print(eos_token_idx)
