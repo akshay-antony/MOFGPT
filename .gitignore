@@ -5,3 +5,4 @@ __pycache__/
 wandb/**
 # all wandb directories in all subdirectories
 **/wandb/**
+.vscode/**

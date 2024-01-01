@@ -58,7 +58,7 @@ training:
 reinforcement_learning:
   training:
     saved_state_dict_filename: "../saved_models/llama2_best.pt"
-    num_samples_per_epoch: 1000
+    num_samples_per_epoch: 1024
     epochs: 10
     fp16: True
     optimizer:
@@ -70,9 +70,19 @@ reinforcement_learning:
     save_dir: "../saved_models/"
     model_name: "llama2_rl"
     batch_size: 4
+  eval:
+    num_samples: 100
+    batch_size: 4
+    eval_interval: 1
+  model:
+    model_name: "llama2_rl"
+    use_cache: False
+    return_dict: True
+    output_attentions: False
+    output_hidden_states: False
   sampling:
     max_seq_len: 512
-    batch_size: 8
+    batch_size: 128
     do_sample: True
     top_k: 1000
     top_p: 0.95
@@ -87,10 +97,7 @@ reinforcement_learning:
     name: "basic_rules"
     discount_factor: 0.99
     basic_rules:
-      success_reward: 1.0
-      failure_reward: -2.0
-      median_reward: -1.0
-      single_sep_reward: 1
+      single_sep_reward: 1.5
       multiple_sep_reward: -1
       no_sep_reward: -1.5
       eos_reward: 0.5

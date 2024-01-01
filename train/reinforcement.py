@@ -1,5 +1,3 @@
-
-import re
 import sys
 sys.path.append("../")
 from matplotlib import use
@@ -15,13 +13,15 @@ from tqdm import tqdm
 import argparse
 import yaml
 from transformers import LlamaConfig, LlamaForCausalLM
+import wandb
 
 def reward_fn(generated_sequences,
-              reward_config: dict):
+              reward_config,
+              eos_token_id,):
     """
     Reward function for RL.
     args:
-        generated_sequences: list of generated sequences, List[int]
+        generated_sequences: list of generated sequences, List[tensor[int]]
         name: name of the reward function, str
         reward_config: reward configuration, dict
     return:
@@ -30,91 +30,22 @@ def reward_fn(generated_sequences,
     rewards = []
     if reward_config["name"] == "basic_rules":
         for seq in generated_sequences:
-            sep_count = seq.count(reward_config["sep_token_id"])
+            curr_reward = 0
+
+            if seq[-1] == eos_token_id:
+                curr_reward += reward_config["basic_rules"]["eos_reward"]
+            else:
+                curr_reward += reward_config["basic_rules"]["no_eos_reward"]
+
+            sep_count = (seq == reward_config["sep_token_id"]).sum().item()
             if sep_count == 1:
-                sep_idx = seq.index(reward_config["sep_token_id"])
-                # check if sep is last token or second last token (check for eos)
-                if sep_idx == len(seq) - 1 or sep_idx == len(seq) - 2:
-                    rewards.append(reward_config["basic_rules"]["medium_reward"])
-                else:
-                    rewards.append(reward_config["basic_rules"]["success_reward"])
+                curr_reward += reward_config["basic_rules"]["single_sep_reward"]
+            elif sep_count > 1:
+                curr_reward += reward_config["basic_rules"]["multiple_sep_reward"]
             elif sep_count == 0:
-                rewards.append(reward_config["basic_rules"]["failure_reward"])
-            
-            # check for eos
-            
+                curr_reward += reward_config["basic_rules"]["no_sep_reward"]
+            rewards.append(curr_reward)
     return rewards
-
-def reinforce(model,
-              tokenizer,
-              device,
-              rl_config,
-              optimizer,
-              scheduler,
-              save_dir,
-              config):
-    """
-    Reinforcement learning.
-    """
-    # Set model to train mode.
-    model.train()
-
-    # assign sepator token id
-    rl_config["reward"]["sep_token_id"] = tokenizer.convert_token_to_id(rl_config["sep_token"])
-    for epoch in range(rl_config["training"]["epochs"]):
-        num_steps = rl_config["num_samples"] // rl_config["sampling"]["batch_size"]
-        loop = tqdm(range(num_steps),
-                    leave=True,
-                    colour="green",)
-        # for step in loop:
-            # curr_tokens = np.array([tokenizer.bos_token_id])
-            # batch_sequence = sample_smiles(model=model,
-            #                                device=device,
-            #                                tokenizer=tokenizer,
-            #                                rl_config=rl_config,
-            #                                curr_tokens=curr_tokens)
-
-            # batch_reward = reward_fn(generated_sequences=generated_sequences,
-            #                          reward_config=rl_config["reward"])
-            # print(batch_reward)
-            # loss = 0
-            # for seq, reward in zip(batch_sequence, batch_reward):
-            #     eos_token_idx = seq.index(tokenizer.eos_token_id)
-            #     seq = seq[:eos_token_idx+1]
-            #     discounted_reward = (torch.pow(rl_config["reward"]["discount_factor"], 
-            #                                    torch.arange(len(seq)-1, 0, -1)) * reward).to(device)
-            #     if rl_config["training"]["fp16"]:
-            #         with autocast():
-            #             output = model(torch.tensor(seq[:-1]).unsqueeze(0).to(device),
-            #                            attention_mask=torch.tensor([1]*len(seq[:-1])).unsqueeze(0).to(device),
-            #                            labels=torch.tensor(seq[1:]).unsqueeze(0).to(device),
-            #                            use_cache=False,
-            #                            return_dict=True)
-            #             logits = output.logits
-            #     else:
-            #         output = model(torch.tensor(seq[:-1]).unsqueeze(0).to(device),
-            #                        attention_mask=torch.tensor([1]*len(seq[:-1])).unsqueeze(0).to(device),
-            #                        labels=torch.tensor(seq[1:]).unsqueeze(0).to(device),
-            #                        use_cache=False,
-            #                        return_dict=True)
-            #         logits = output.logits
-
-            #     log_preds = nn.functional.log_softmax(logits, dim=1)
-            #     idxs = torch.tensor(seq[1:]).unsqueeze(0).to(device)
-            #     action_vals = torch.gather(log_preds, 1, idxs).view(-1, 1)
-            #     expected_reward = - torch.sum(action_vals * discounted_reward.view(-1, 1))
-
-            # loss += expected_reward
-
-            # if rl_config["training"]["fp16"]:
-            #     optimizer.backward(loss)
-            # else:
-            #     loss.backward()
-            
-
-            # optimizer.zero_grad()
-            # loss.backward()
-    return
 
 def make_batch_with_padding(input_token_ids,
                             device,
@@ -133,7 +64,7 @@ def make_batch_with_padding(input_token_ids,
     padded_labels = torch.zeros((0, max_len),
                                 dtype=torch.long,
                                 device=device)
-    
+    sequence_lens = []
     for input_token_id in input_token_ids:
         curr_padded_token_id = torch.cat((input_token_id.reshape(-1),
                                           tokenizer.pad_token_id * torch.ones(max_len - len(input_token_id),
@@ -151,18 +82,23 @@ def make_batch_with_padding(input_token_ids,
                                         ignore_index * torch.ones(max_len - len(input_token_id) + 1,
                                                                   dtype=torch.long,
                                                                   device=device).reshape(-1))).reshape(1, -1)
+        sequence_lens.append(len(input_token_id)-1)
         padded_token_ids = torch.cat((padded_token_ids, curr_padded_token_id), dim=0)
         padded_attention_mask = torch.cat((padded_attention_mask, curr_padded_attention_mask), dim=0)
         padded_labels = torch.cat((padded_labels, curr_padded_labels), dim=0)                                               
-    return padded_token_ids, padded_attention_mask, padded_labels                 
+    return padded_token_ids, padded_attention_mask, padded_labels, sequence_lens                 
 
 def train_one_epoch(model,
                     tokenizer,
                     training_config,
                     sampling_config,
                     reward_config,
+                    model_config,
                     device,
-                    ignore_index):
+                    ignore_index,
+                    optimizer,
+                    epoch,
+                    scaler=None,):
     """
     Train one epoch.
     """
@@ -183,58 +119,122 @@ def train_one_epoch(model,
                                             curr_tokens=curr_tokens)
         for seq in generated_sequence:
             generated_sequences.append(seq)
-        print(len(generated_sequences))
-        print(f"types: {generated_sequences[0].dtype}")
         torch.cuda.empty_cache()
-        break
     
     model.train()
     nun_train_steps = training_config["num_samples_per_epoch"] // training_config["batch_size"]
     loop = tqdm(range(nun_train_steps),
                 leave=True,
                 colour="green",)
+    
+    epoch_loss = 0
+    epoch_reward = 0
+    epoch_element_count = 0
     for step in loop:
         # sample from generated sequences
+        batch_reward = 0
+        batch_loss = 0
         sampled_indices = np.random.choice(len(generated_sequences),
                                            training_config["batch_size"],
                                            replace=False)
         sampled_sequences = [generated_sequences[i] for i in sampled_indices]
-        for seq in sampled_sequences:
-            print(len(seq))
+        rewards = reward_fn(generated_sequences=sampled_sequences,
+                            reward_config=reward_config,
+                            eos_token_id=tokenizer.eos_token_id)
+        rewards = torch.tensor(rewards,
+                               dtype=torch.float,
+                               device=device).reshape(-1, 1) # (batch_size, 1)
+        
         # make batch
         padded_token_ids, \
         padded_attention_mask, \
-        padded_labels = make_batch_with_padding(input_token_ids=sampled_sequences,
-                                                device=device,
-                                                tokenizer=tokenizer,
-                                                ignore_index=ignore_index)
-        # print(padded_token_ids.shape)
-        # print(padded_attention_mask.shape)
-        # print(padded_labels.shape)
-        # print("token_ids")
-        # print(padded_token_ids[0])
-        # print("attention_mask")
-        # print(padded_attention_mask[0])
-        # print("labels")
-        # print(padded_labels[0])
-        # print("########## 1 ##########")
-        # print("token_ids")
-        # print(padded_token_ids[1])
-        # print("attention_mask")
-        # print(padded_attention_mask[1])
-        # print("labels")
-        # print(padded_labels[1])
+        padded_labels, \
+        seq_lens = make_batch_with_padding(input_token_ids=sampled_sequences,
+                                           device=device,
+                                           tokenizer=tokenizer,
+                                           ignore_index=ignore_index)
+        batch_count = padded_token_ids.shape[0]
         if training_config["fp16"]:
             with autocast():
                 output = model(input_ids=padded_token_ids,
                                attention_mask=padded_attention_mask,
                                labels=padded_labels,
-                               use_cache=False,
-                               
-        print(padded_token_ids.shape)
-        return
-        # loop.set_description(f"Loss: {loss.item():.4f}")
+                               use_cache=model_config["use_cache"],
+                               return_dict=model_config["return_dict"],
+                               output_attentions=model_config["output_attentions"],
+                               output_hidden_states=model_config["output_hidden_states"])
+        else:
+            output = model(input_ids=padded_token_ids,
+                           attention_mask=padded_attention_mask,
+                           labels=padded_labels,
+                           use_cache=model_config["use_cache"],
+                           return_dict=model_config["return_dict"],
+                           output_attentions=model_config["output_attentions"],
+                           output_hidden_states=model_config["output_hidden_states"])
+        
+        curr_loss = output.loss.item()
+        curr_logits = output.logits
+        log_preds = torch.nn.functional.log_softmax(curr_logits, dim=-1)
+        for b_no, log_pred in enumerate(log_preds):
+            discounted_returns = (torch.pow(reward_config["discount_factor"], 
+                                            torch.arange(seq_lens[b_no], 
+                                                            0, 
+                                                            -1, 
+                                                            device=device)) * rewards[b_no]).reshape(-1, 1).to(device)
+            action_values = log_pred[torch.arange(seq_lens[b_no]), 
+                                     padded_labels[b_no, :seq_lens[b_no]]].reshape(-1, 1)
+            batch_reward += rewards[b_no]    
+            expected_reward = -torch.sum(discounted_returns * action_values)
+            batch_loss += expected_reward
+        batch_loss /= batch_count
+        batch_reward /= batch_count
+        epoch_loss += batch_loss.item() * batch_count
+        epoch_reward += batch_reward.item() * batch_count
+        epoch_element_count += batch_count
 
+        if training_config["fp16"]:
+            scaler.scale(batch_loss).backward()
+        else:
+            batch_loss.backward()
+
+        loop.set_description(f"Epoch [{epoch+1}/{training_config['epochs']}]")
+        loop.set_postfix(loss=batch_loss.item(),
+                         reward=batch_reward.item())
+        
+    scaler.step(optimizer)
+    scaler.update()
+    optimizer.zero_grad()
+    return epoch_loss / epoch_element_count, epoch_reward / epoch_element_count
+
+def evaluate(model,
+             tokenizer,
+             eval_config,
+             sampling_config,
+             reward_config,
+             model_config,
+             device,
+             ignore_index,):
+    """
+    Evaluate the model by generating SMILES.
+    """
+    model.eval()
+    curr_tokens = torch.tensor([tokenizer.bos_token_id],
+                               device=device).unsqueeze(0)
+    curr_tokens = torch.tile(curr_tokens,
+                             (eval_config["num_samples"], 1))
+    print(f"Sampling {eval_config['num_samples']} sequences")
+    generated_sequences = sample_smiles(model=model,
+                                        tokenizer=tokenizer,
+                                        sampling_config=sampling_config,
+                                        curr_tokens=curr_tokens)
+    eval_reward = 0
+    for seq in generated_sequences:
+        eval_reward += reward_fn(generated_sequences=[seq],
+                                 reward_config=reward_config,
+                                 eos_token_id=tokenizer.eos_token_id)[0]
+    eval_reward /= len(generated_sequences)
+    return eval_reward
+    
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_filename",
@@ -251,6 +251,9 @@ def main():
     tokenizer_config = config["data"]["tokenizer"]
     model_config = config["model"]
     data_config = config["data"]
+    rl_model_config = rl_config["model"]
+    wandb.init(project=rl_config["training"]["model_name"])
+    wandb.config.update(config)
     
     tokenizer = MOFTokenizerGPT(vocab_file=data_config["vocab_path"],
                                 add_special_tokens=tokenizer_config["add_special_tokens"],  
@@ -296,16 +299,53 @@ def main():
     if model.load_state_dict(saved_dict["model_state_dict"]):
         print("Model state dict loaded")
 
+    if rl_config["training"]["fp16"]:
+        scaler = torch.cuda.amp.GradScaler()
+    else:
+        scaler = None
+
+    eval_config = rl_config["eval"]
+    best_reward = -np.inf
     for epoch in range(rl_config["training"]["epochs"]):
+        print(f"Epoch {epoch+1}/{rl_config['training']['epochs']}")
         # train one epoch
-        train_one_epoch(model=model,
-                        tokenizer=tokenizer,
-                        training_config=rl_config["training"],
-                        sampling_config=rl_config["sampling"],
-                        reward_config=rl_config["reward"],
-                        device=device,
-                        ignore_index=config["data"]["ignore_index"])
-        return    
+        train_epoch_loss, \
+        train_epoch_reward = train_one_epoch(model=model,
+                                             tokenizer=tokenizer,
+                                             training_config=rl_config["training"],
+                                             sampling_config=rl_config["sampling"],
+                                             reward_config=rl_config["reward"],
+                                             model_config=rl_model_config,
+                                             device=device,
+                                             ignore_index=config["data"]["ignore_index"],
+                                             optimizer=optimizer,
+                                             scaler=scaler,
+                                             epoch=epoch,)
+        print(f"Train epoch loss: {train_epoch_loss}")
+        print(f"Train epoch reward: {train_epoch_reward}")
+        if epoch % eval_config["eval_interval"] == 0:
+            eval_reward = evaluate(model=model,
+                                   tokenizer=tokenizer,
+                                   eval_config=eval_config,
+                                   sampling_config=rl_config["sampling"],
+                                   reward_config=rl_config["reward"],
+                                   model_config=rl_model_config,
+                                   device=device,
+                                   ignore_index=config["data"]["ignore_index"],)
+            print(f"Eval reward: {eval_reward}")
+            if eval_reward > best_reward:
+                best_reward = eval_reward
+                save_filename = f"{rl_config['training']['save_dir']}/best_reward_{rl_config['training']['model_name']}.pt"
+                torch.save({"model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                            "epoch": epoch,
+                            "best_reward": best_reward,}, 
+                           save_filename)
+                print("Model saved to {}".format(save_filename))
+        wandb.log({"train_epoch_loss": train_epoch_loss,
+                   "train_epoch_reward": train_epoch_reward,
+                   "eval_reward": eval_reward,
+                   "epoch": epoch})
 
 if __name__ == "__main__":
     main()

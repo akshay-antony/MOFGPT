@@ -1,4 +1,6 @@
+from calendar import c
 from math import e
+from os import sep
 import re
 import numpy as np
 import torch
@@ -38,7 +40,8 @@ def sample_smiles(model,
     return generated_sequences
 
 def reward_fn(generated_sequences,
-              reward_config=None):
+              reward_config,
+              eos_token_id,):
     """
     Reward function for RL.
     args:
@@ -51,16 +54,21 @@ def reward_fn(generated_sequences,
     rewards = []
     if reward_config["name"] == "basic_rules":
         for seq in generated_sequences:
+            curr_reward = 0
+
+            if seq[-1] == eos_token_id:
+                curr_reward += reward_config["basic_rules"]["eos_reward"]
+            else:
+                curr_reward += reward_config["basic_rules"]["failure_reward"]
+
             sep_count = seq.count(reward_config["sep_token_id"])
             if sep_count == 1:
-                sep_idx = seq.index(reward_config["sep_token_id"])
-                # check if sep is last token or second last token (check for eos)
-                if sep_idx == len(seq) - 1 or sep_idx == len(seq) - 2:
-                    rewards.append(reward_config["basic_rules"]["medium_reward"])
-                else:
-                    rewards.append(reward_config["basic_rules"]["success_reward"])
+                curr_reward += reward_config["basic_rules"]["single_sep_reward"]
+            elif sep_count > 1:
+                curr_reward += reward_config["basic_rules"]["multiple_sep_reward"]
             elif sep_count == 0:
-                rewards.append(reward_config["basic_rules"]["failure_reward"])
+                curr_reward += reward_config["basic_rules"]["no_sep_reward"]
+            rewards.append(curr_reward)
     return rewards
 
 
