@@ -96,6 +96,9 @@ def train_one_epoch(model,
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_train_loss/total_train_data,
                              lr=scheduler.get_last_lr()[0])
+            wandb.log({"train_loss_step": total_train_loss/total_train_data,
+                       "lr": scheduler.get_last_lr()[0],
+                       "step": epoch*len(train_dataloader) + b_no})
             # for top_no, top_k in enumerate(top_ks):
             #     print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
             
