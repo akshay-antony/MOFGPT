@@ -44,7 +44,8 @@ class MOFTokenizerGPT(object):
                  unk_token='[UNK]',
                  max_len=512,
                  add_special_tokens=True,
-                 truncation=True):
+                 truncation=True,
+                 use_topology=True):
       self.max_len = max_len
       self.vocab = load_vocab(vocab_file)
       self.ids_to_tokens = collections.OrderedDict(
@@ -58,6 +59,7 @@ class MOFTokenizerGPT(object):
       self.unk_token = unk_token
       self.add_special_tokens = add_special_tokens
       self.truncation = truncation
+      self.use_topology = use_topology
 
     @property
     def vocab_size(self):
@@ -98,6 +100,8 @@ class MOFTokenizerGPT(object):
         """
         smiles, topo = text.split('&&')
         smiles_tokens = [token for token in self.basic_tokenizer.tokenize(smiles)]
+        if not self.use_topology:
+          return smiles_tokens
         topo_tokens = self.topo_tokenizer.tokenize(topo)
         split_tokens = smiles_tokens + ['&&'] + topo_tokens
         return split_tokens

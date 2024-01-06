@@ -3,8 +3,8 @@ project_name: "llama2_mof_gpt"
 data:
   csv_folder_paths: 
     - '../benchmark_datasets/QMOF/mofid/'
-    # - '../benchmark_datasets/hMOF/mofid/'
-    # - '../benchmark_datasets/Boyd&Woo/mofid/'
+    - '../benchmark_datasets/hMOF/mofid'
+    - '../benchmark_datasets/Boyd&Woo/mofid/'
   vocab_path: "../tokenizer/vocab_with_eos.txt"
   train_test_ratio: 0.8
   batch_size: 32 #4
@@ -20,6 +20,7 @@ data:
     unk_token: '[UNK]'
     add_special_tokens: True
     truncation: True
+    use_topology: False
 
 model:
   model_name: "llama2"
@@ -72,7 +73,7 @@ reinforcement_learning:
     model_name: "llama2_rl"
     batch_size: 128
   eval:
-    num_samples: 8
+    num_samples: 128
     eval_interval: 1
     print_smiles: True
   model:
@@ -83,7 +84,7 @@ reinforcement_learning:
     output_hidden_states: False
   sampling:
     max_seq_len: 512
-    batch_size: 128
+    batch_size: 32
     do_sample: True
     top_k: 1000
     top_p: 0.95

@@ -12,7 +12,7 @@ from tqdm import tqdm
 from dataset.dataset_gpt import MOF_ID_Dataset
 from tokenizer.mof_tokenizer import MOFTokenizer
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
-from utils.split_csv import split_csv
+from utils.data_utils import split_csv
 from transformers import GPT2Config, \
                          GPT2LMHeadModel, \
                          LlamaConfig, \
@@ -210,7 +210,8 @@ def main():
                                 bos_token=config_tokenizer['bos_token'],
                                 eos_token=config_tokenizer['eos_token'],
                                 unk_token=config_tokenizer['unk_token'],
-                                max_len=config_tokenizer['max_seq_len'],)
+                                max_len=config_tokenizer['max_seq_len'],
+                                use_topology=config_tokenizer['use_topology'],)
 
     config_model['vocab_size'] = tokenizer.vocab_size
     print(f"tokenizer vocab size: {tokenizer.vocab_size}")
@@ -218,8 +219,9 @@ def main():
     # return
     csv_filenames = []
     for csv_folder_path in config['data']['csv_folder_paths']:
-        csv_filenames.extend(glob.glob(csv_folder_path + '*.csv'))
-
+        csv_filenames.extend(glob.glob(csv_folder_path + '**/*.csv',
+                                       recursive=True))
+    print(f"Number of csv files: {len(csv_filenames)}")
     train_data_np, \
     test_data_np = split_csv(csv_filenames,
                              train_test_ratio = config['data']['train_test_ratio'],
@@ -246,7 +248,6 @@ def main():
                                  shuffle=True, 
                                  num_workers=config['data']['num_workers'],
                                  collate_fn=test_dataset.collate_fn)
-
     # Model config
     # adding special token ids to model config
     config_model['pad_token_id'] = tokenizer.pad_token_id

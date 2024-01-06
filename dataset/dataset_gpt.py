@@ -1,8 +1,5 @@
-from __future__ import print_function, division
 
-import csv
 import functools
-import math
 import numpy as np
 import torch
 import os
@@ -10,6 +7,19 @@ from tqdm import tqdm
 import multiprocessing
 from torch.utils.data import Dataset
 
+
+def count_duplicates(data):
+    """
+    Count the number of duplicates in a list
+    """
+    unq_set = set()
+    num_duplicates = 0
+    for i in data:
+        if i in unq_set:
+            num_duplicates += 1
+        else:
+            unq_set.add(i)
+    return num_duplicates
 
 class MOF_ID_Dataset(Dataset):
     'Characterizes a dataset for PyTorch'
@@ -20,6 +30,8 @@ class MOF_ID_Dataset(Dataset):
                  ignore_index,
                  use_multiprocessing):
         self.data = data
+        # num_duplicates = count_duplicates(self.data[:, 0])
+        # print(f"Number of duplicates: {num_duplicates}")
         self.tokenizer = tokenizer
         self.use_multiprocessing = use_multiprocessing
         #     self.data = data[:int(len(data)*use_ratio)]
@@ -125,3 +137,14 @@ class MOF_tsne_Dataset(Dataset):
         y = self.label[index]
         topo = self.mofid[index].split('&&')[-1].split('.')[0]
         return X, y, topo
+
+
+# if __name__ == "__main__":
+#     config_filename = "../config/config.yaml"
+#     with open(config_filename, 'r') as f:
+#         config = yaml.load(f, Loader=yaml.FullLoader)
+#     config_tokenizer = config['tokenizer']
+#     config_data = config['data']
+#     config_model = config['model']
+
+    

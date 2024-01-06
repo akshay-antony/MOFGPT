@@ -7,7 +7,7 @@ from tqdm import tqdm
 import yaml
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
 import glob
-from split_csv import split_csv
+from utils.data_utils import split_csv
 import os
 import csv
 import json
@@ -35,7 +35,7 @@ def count_unique_tokens(data,
             print(f"{i}: {unique_tokens_str[i]}")
     save_filename = "./unique_tokens.json"
     with open(save_filename, "w") as f:
-        json.dump(unique_tokens_str, f)
+        json.dump(unique_tokens_str, f, indent=4)
 
 def visualize_unique_tokens(unique_tokens_str):
     # import matplotlib
@@ -71,7 +71,7 @@ def main():
     return
 
 def main2():
-    config_filename = "../config.yaml"
+    config_filename = "../config/config.yaml"
     with open(config_filename, "r") as f:
         config = yaml.safe_load(f)
     config_tokenizer = config["data"]["tokenizer"]
@@ -86,7 +86,7 @@ def main2():
                                 max_len=config_tokenizer["max_seq_len"],)
     csv_filenames = []
     for csv_folder_path in config["data"]["csv_folder_paths"]:
-        csv_folder_path = os.path.join("../", csv_folder_path)
+        # csv_folder_path = os.path.join( csv_folder_path)
         csv_filenames.extend(glob.glob(os.path.join(csv_folder_path, "*.csv")))
     
     all_data_list = []
@@ -97,8 +97,8 @@ def main2():
             for row in reader:
                 all_data_list.append(row)
     print(f"shape of all_csv: {len(all_data_list)}")    
-    # count_unique_tokens(all_data_list, tokenizer)
+    count_unique_tokens(all_data_list, tokenizer)
 
     
 if __name__ == "__main__":
-    main()
+    main2()
