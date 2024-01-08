@@ -1,0 +1,35 @@
+
+llama2:
+  model_name: "llama2"
+  pretrained_model_name: "llama2"
+  hidden_size: 1024
+  intermediate_size: 2048
+  num_hidden_layers: 8
+  num_attention_heads: 8
+  num_key_value_heads: 8 # for grouped query attention
+  use_cache: False
+  rope_theta: 10000.0 # default value
+  hidden_act: "silu" # default value
+  # return vals
+  return_dict: True
+  output_attentions: False
+  output_hidden_states: False
+
+gpt2:
+  model_name: "gpt2"
+  pretrained_model_name: "gpt2"
+  n_embd: 768 # dimension of embeddings and hidden states
+  n_layer: 4 # number of layers
+  n_head: 8 # number of attention heads
+  n_inner: 3072 # inner dimension in feed-forward layer 4*768
+  activation_function: "gelu_new" # activation function in feed-forward layer
+  resid_pdrop: 0.1 # dropout probability for residual connection
+  embd_pdrop: 0.1 # dropout probability for embedding
+  attn_pdrop: 0.1 # dropout probability for attention
+  layer_norm_epsilon: 0.00001 # epsilon for layer normalization
+  initializer_range: 0.02 # standard deviation of normal initializer
+  use_cache: False
+  # return vals
+  return_dict: True
+  output_attentions: False
+  output_hidden_states: False

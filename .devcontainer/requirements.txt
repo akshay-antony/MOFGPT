@@ -3,4 +3,4 @@ transformers
 torchmetrics
 wandb
 gdown
-
+rdkit

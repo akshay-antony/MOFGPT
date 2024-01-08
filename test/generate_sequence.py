@@ -71,6 +71,7 @@ def main():
     with torch.no_grad():
         if generate_config['num_beams'] > 1:
             generated_sequence = model.generate(inputs=torch.tensor(token_ids).unsqueeze(0).to(device),
+                                                num_beams=generate_config["num_beams"],
                                                 max_length=config_tokenizer["max_seq_len"],
                                                 early_stopping=generate_config["early_stopping"],
                                                 do_sample=generate_config["do_sample"],
@@ -81,55 +82,59 @@ def main():
                                                 eos_token_id=tokenizer.eos_token_id,
                                                 pad_token_id=tokenizer.pad_token_id,
                                                 bos_token_id=tokenizer.bos_token_id,
-                                                use_cache=False,)
+                                                use_cache=True,)
             generated_sequences = [seq for seq in generated_sequence]
         else:
             for seq_no in tqdm(range(generate_config["num_return_sequences"])):
-                if train_config["training"]["fp16"]:
-                    input = torch.tensor(token_ids).unsqueeze(0).to(device)
-                    input = torch.tile(input, (4, 1))
-                    with autocast():
-                        generated_sequence = model.generate(inputs=input,
-                                                            max_length=config_tokenizer["max_seq_len"],
-                                                            do_sample=generate_config["do_sample"],
-                                                            early_stopping=generate_config["early_stopping"],
-                                                            num_beam_groups=generate_config["num_beam_groups"],
-                                                            temperature=generate_config["temperature"],
-                                                            top_k=generate_config["top_k"],
-                                                            eos_token_id=tokenizer.eos_token_id,
-                                                            pad_token_id=tokenizer.pad_token_id,
-                                                            bos_token_id=tokenizer.bos_token_id,
-                                                            use_cache=True,)
+                # if train_config["training"]["fp16"]:
+                #     input = torch.tensor(token_ids).unsqueeze(0).to(device)
+                #     input = torch.tile(input, (4, 1))
+                #     with autocast():
+                #         generated_sequence = model.generate(inputs=input,
+                #                                             max_length=config_tokenizer["max_seq_len"],
+                #                                             do_sample=generate_config["do_sample"],
+                #                                             early_stopping=generate_config["early_stopping"],
+                #                                             num_beam_groups=generate_config["num_beam_groups"],
+                #                                             temperature=generate_config["temperature"],
+                #                                             top_k=generate_config["top_k"],
+                #                                             eos_token_id=tokenizer.eos_token_id,
+                #                                             pad_token_id=tokenizer.pad_token_id,
+                #                                             bos_token_id=tokenizer.bos_token_id,
+                #                                             use_cache=True,)
                         # print(f"generated_sequence: {generated_sequence}")
-                else:
-                    generated_sequence = model.generate(inputs=torch.tensor(token_ids).unsqueeze(0).to(device),
-                                                        max_length=config_tokenizer["max_seq_len"],
-                                                        do_sample=generate_config["do_sample"],
-                                                        early_stopping=generate_config["early_stopping"],
-                                                        num_beam_groups=generate_config["num_beam_groups"],
-                                                        temperature=generate_config["temperature"],
-                                                        top_k=generate_config["top_k"],
-                                                        eos_token_id=tokenizer.eos_token_id,
-                                                        pad_token_id=tokenizer.pad_token_id,
-                                                        bos_token_id=tokenizer.bos_token_id,
-                                                        use_cache=True,)
+                generated_sequence = model.generate(inputs=torch.tensor(token_ids).unsqueeze(0).to(device),
+                                                    max_length=config_tokenizer["max_seq_len"],
+                                                    do_sample=generate_config["do_sample"],
+                                                    early_stopping=False,
+                                                    temperature=generate_config["temperature"],
+                                                    top_k=generate_config["top_k"],
+                                                    eos_token_id=tokenizer.eos_token_id,
+                                                    pad_token_id=tokenizer.pad_token_id,
+                                                    bos_token_id=tokenizer.bos_token_id,
+                                                    use_cache=True,)
+                # print(f"generated_sequence: {len(generated_sequence)}")
                 for seq in generated_sequence:
                     generated_sequences.append(seq)
             torch.cuda.empty_cache()
 
-    valid_sequences = []
-    sep_sign = "&&"
+    print(f"length of generated_sequences: {len(generated_sequences)}")
     for i, sequence in enumerate(generated_sequences):
         sequence_list = tokenizer.convert_ids_to_tokens(list(sequence.cpu().numpy().reshape(-1)))
         sequence_str = ''.join(sequence_list).replace("[PAD]", "").replace("[BOS]", "").replace("[MASK]", "").replace("[UNK]", "").strip()
         print(f"sequence {i}: {sequence_str}")
-        if sep_sign in sequence_str:
-            # number of separator tokens
-            sep_count = sequence_str.count(sep_sign)
-            if sep_count == 1:
-                valid_sequences.append(sequence_str)
+    # valid_sequences = []
+    # sep_sign = "&&"
+    # for i, sequence in enumerate(generated_sequences):
+    #     sequence_list = tokenizer.convert_ids_to_tokens(list(sequence.cpu().numpy().reshape(-1)))
+    #     sequence_str = ''.join(sequence_list).replace("[PAD]", "").replace("[BOS]", "").replace("[MASK]", "").replace("[UNK]", "").strip()
+    #     print(f"sequence {i}: {sequence_str}")
+    #     if sep_sign in sequence_str:
+    #         # number of separator tokens
+    #         sep_count = sequence_str.count(sep_sign)
+    #         if sep_count == 1:
+    #             valid_sequences.append(sequence_str)
     
-    print(f"valid_sequences count: {len(valid_sequences)} out of {len(generated_sequences)}")
+    # print(f"valid_sequences count: {len(valid_sequences)} out of {len(generated_sequences)}")
 
 if __name__ == "__main__":
     main()

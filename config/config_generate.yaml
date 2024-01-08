@@ -1,8 +1,8 @@
 state_dict_filename: "../saved_models/llama2_best.pt"
 do_sample: true # multinomial sampling
-num_beams: 0 # beam search
-early_stopping: false # stop when at least num_beams sentences finished per batch
+num_beams: 1 # beam search
+early_stopping: true # stop when at least num_beams sentences finished per batch
 num_beam_groups: 1 # diverse beam search
-temperature: 0.7 # temperature sampling
+temperature: 1.5 # temperature sampling
 top_k: 200 # top k sampling for multinomial sampling or any other strategy
-num_return_sequences: 20 # number of sequences to return 
+num_return_sequences: 40 # number of sequences to return 

@@ -1,3 +1,4 @@
+from ast import mod
 import sys
 sys.path.append('..')
 import torch
@@ -13,6 +14,7 @@ from dataset.dataset_gpt import MOF_ID_Dataset
 from tokenizer.mof_tokenizer import MOFTokenizer
 from tokenizer.mof_tokenizer_gpt import MOFTokenizerGPT
 from utils.data_utils import split_csv
+from models.get_model import get_model
 from transformers import GPT2Config, \
                          GPT2LMHeadModel, \
                          LlamaConfig, \
@@ -21,9 +23,11 @@ from transformers import get_cosine_schedule_with_warmup
 from torch.cuda.amp import autocast, GradScaler
 from torchmetrics.functional.classification import multiclass_accuracy
 import wandb
+from models.models import LLMModel
 
 
 def train_one_epoch(model,
+                    model_class,
                     train_dataloader,
                     optimizer,
                     scheduler,
@@ -35,7 +39,6 @@ def train_one_epoch(model,
                     scaler,
                     model_name,
                     save_dir,
-                    top_ks,
                     save_steps,
                     config_model):
     model.train()
@@ -45,41 +48,37 @@ def train_one_epoch(model,
                 total=len(train_dataloader))
     total_train_loss = 0
     total_train_data = 0
-    total_correct_topks = [0 for _ in top_ks]
     optimizer.zero_grad()
 
     for b_no, batch in enumerate(loop):
         token_ids = batch['token_ids'].to(device)
         mask_ids = batch['mask_ids'].to(device)
         target_token_ids = batch['target_token_ids'].to(device)
-        
+        outputs = model_class.forward(token_ids,
+                                      mask_ids,
+                                      target_token_ids,
+                                      is_fp16)
+        # if is_fp16:
+        #     with autocast():
+        #         outputs = model(input_ids=token_ids,
+        #                         attention_mask=mask_ids,
+        #                         labels=target_token_ids,
+        #                         use_cache=config_model['use_cache'],
+        #                         return_dict=config_model['return_dict'],
+        #                         output_attentions=config_model['output_attentions'],
+        #                         output_hidden_states=config_model['output_hidden_states'])
+        #         loss = outputs.loss
+        #         scaler.scale(loss).backward()
+        # else:
+        #     outputs = model(input_ids=token_ids,
+        #                     attention_mask=mask_ids,
+        #                     labels=target_token_ids,
+        #                     use_cache=True)
+        loss = outputs.loss
         if is_fp16:
-            with autocast():
-                outputs = model(input_ids=token_ids,
-                                attention_mask=mask_ids,
-                                labels=target_token_ids,
-                                use_cache=config_model['use_cache'],
-                                return_dict=config_model['return_dict'],
-                                output_attentions=config_model['output_attentions'],
-                                output_hidden_states=config_model['output_hidden_states'])
-                loss = outputs.loss
-                scaler.scale(loss).backward()
+            scaler.scale(loss).backward()
         else:
-            outputs = model(input_ids=token_ids,
-                            attention_mask=mask_ids,
-                            labels=target_token_ids,
-                            use_cache=True)
-            loss = outputs.loss
             loss.backward()
-
-        # curr_topk_accs = calculate_accuracy(outputs.logits.detach().cpu().reshape(-1,
-        #                                                                           outputs.logits.shape[-1]),
-        #                                     target_token_ids.detach().cpu().reshape(-1),    
-        #                                     top_ks=top_ks,
-        #                                     ignore_index=-100)
-        # for top_no, topk_acc in enumerate(curr_topk_accs):
-        #     total_correct_topks[top_no] += topk_acc * token_ids.shape[0]
-        
         total_train_loss += loss.item() * token_ids.shape[0]
         total_train_data += token_ids.shape[0]
 
@@ -99,9 +98,7 @@ def train_one_epoch(model,
             wandb.log({"train_loss_step": total_train_loss/total_train_data,
                        "lr": scheduler.get_last_lr()[0],
                        "step": epoch*len(train_dataloader) + b_no})
-            # for top_no, top_k in enumerate(top_ks):
-            #     print(f"top_{top_k}_acc: {total_correct_topks[top_no]/total_train_data}")
-            
+           
         if b_no % save_steps == 0:
             save_model(model,
                        epoch,
@@ -109,16 +106,16 @@ def train_one_epoch(model,
                        optimizer,
                        scheduler,
                        loss)
-    total_topk_accs = [total_correct_topk/total_train_data for total_correct_topk in total_correct_topks]          
-    return total_train_loss/total_train_data, total_topk_accs
+
+    return total_train_loss/total_train_data
 
 def eval_one_epoch(model,
+                   model_class,
                    test_dataloader,
                    device,
                    epoch,
                    logging_steps=100,
-                   is_fp16=False,
-                   top_ks=[1, 5, 10]):
+                   is_fp16=False):
     model.eval()
     loop = tqdm(test_dataloader,
                 desc=f"Evaluation Epoch {epoch}",
@@ -126,26 +123,16 @@ def eval_one_epoch(model,
                 total=len(test_dataloader))
     total_test_loss = 0
     total_test_data = 0
-    total_correct_topks = [0 for _ in top_ks]
     for b_no, batch in enumerate(loop):
         token_ids = batch['token_ids'].to(device)
         mask_ids = batch['mask_ids'].to(device)
         target_token_ids = batch['target_token_ids'].to(device)
         
-        with torch.no_grad():
-            if is_fp16:
-                with autocast():
-                    outputs = model(input_ids=token_ids,
-                                    attention_mask=mask_ids,
-                                    labels=target_token_ids,
-                                    use_cache=True)
-                    loss = outputs.loss
-            else:
-                outputs = model(input_ids=token_ids,
-                                attention_mask=mask_ids,
-                                labels=target_token_ids,
-                                use_cache=True)
-                loss = outputs.loss
+        outputs = model_class.forward(token_ids,
+                                      mask_ids,
+                                      target_token_ids,
+                                      is_fp16)
+        loss = outputs.loss
         total_test_loss += loss.item() * token_ids.shape[0]
         total_test_data += token_ids.shape[0]
    
@@ -153,8 +140,7 @@ def eval_one_epoch(model,
         if b_no % logging_steps == 0 and b_no != 0:
             loop.set_postfix(loss=total_test_loss/total_test_data)
     
-    total_topk_accs = [total_correct_topk/total_test_data for total_correct_topk in total_correct_topks]    
-    return total_test_loss/total_test_data, total_topk_accs
+    return total_test_loss/total_test_data
 
 def save_model(model, 
                epoch, 
@@ -169,22 +155,6 @@ def save_model(model,
                  'loss': loss}
     torch.save(save_dict, save_path)
 
-def calculate_accuracy(logits,
-                       target_token_ids,
-                       top_ks,
-                       ignore_index):
-    logits = logits.reshape(-1, logits.shape[-1]) if type(logits) == torch.Tensor else torch.cat(logits, dim=0).reshape(-1, logits[0].shape[-1])
-    target_token_ids = target_token_ids.reshape(-1) if type(target_token_ids) == torch.Tensor else torch.cat(target_token_ids, dim=0).reshape(-1)
-    top_k_accs = []
-    for top_k in top_ks:
-        acc = multiclass_accuracy(logits,
-                                  target_token_ids,
-                                  top_k=top_k,
-                                  ignore_index=ignore_index,
-                                  average='macro',
-                                  num_classes=logits.shape[-1])
-        top_k_accs.append(acc)
-    return top_k_accs
 
 def main():
     args = argparse.ArgumentParser()
@@ -196,10 +166,13 @@ def main():
 
     with open(args.config_filename, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
+    with open(config['model']['model_config_filename'], 'r') as f:   
+        config_model = yaml.load(f, Loader=yaml.FullLoader)
 
     config_data = config['data']
     config_tokenizer = config_data['tokenizer']
-    config_model = config['model']
+    config_model = config_model[config['model']['model_name']]
+    # config_model = config['model']
     config_training = config['training']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     wandb.init(project=config['project_name'],
@@ -259,20 +232,13 @@ def main():
     config_model['vocab_size'] = tokenizer.vocab_size
     config_model['max_position_embeddings'] = config_tokenizer['max_seq_len']
 
-    model_config = LlamaConfig(vocab_size=config_model['vocab_size'],
-                               hidden_size=config_model['hidden_size'],
-                               intermediate_size=config_model['intermediate_size'],
-                               num_hidden_layers=config_model['num_hidden_layers'],
-                               num_attention_heads=config_model['num_attention_heads'],
-                               num_key_value_heads=config_model['num_key_value_heads'],
-                               hidden_act=config_model['hidden_act'],
-                               max_position_embeddings=config_model['max_position_embeddings'],
-                               use_cache=config_model['use_cache'],
-                               pad_token_id=config_model['pad_token_id'],
-                               bos_token_id=config_model['bos_token_id'],
-                               eos_token_id=config_model['eos_token_id'],
-                               rope_theta=config_model['rope_theta'],)
-    model = LlamaForCausalLM(model_config).to(device)
+    model = get_model(config['model']['model_name'],
+                      config_model,
+                      device)
+    model_class = LLMModel(network=model,
+                           model_name=config['model']['model_name'],
+                           config=config_model)
+
     print(f"Number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)/1e6}M")
 
     # optimizer
@@ -296,7 +262,6 @@ def main():
         os.makedirs(config['training']['save_dir'])
 
     min_test_loss = np.inf
-    top_ks = config_training['top_ks']
 
     # calculating logging and save steps from ratios
     config_training['logging_steps'] = int(len(train_dataloader) * config_training['logging_ratio'])
@@ -306,30 +271,30 @@ def main():
     # training
     for epoch in range(config_training['epochs']):
         # training
-        train_loss, train_topks = train_one_epoch(model,
-                                                  train_dataloader,
-                                                  optimizer,
-                                                  scheduler,
-                                                  device,
-                                                  epoch,
-                                                  is_fp16=config_training['fp16'],
-                                                  logging_steps=config_training['logging_steps'],
-                                                  gradient_accumulation_steps=config_training['optimizer']['gradient_accumulation_steps'],
-                                                  scaler=scaler,
-                                                  model_name=config['model']['model_name'],
-                                                  save_dir=config['training']['save_dir'],
-                                                  top_ks=top_ks,
-                                                  save_steps=config_training['save_steps'],
-                                                  config_model=config_model)
+        train_loss = train_one_epoch(model,
+                                     model_class,
+                                     train_dataloader,
+                                     optimizer,
+                                     scheduler,
+                                     device,
+                                     epoch,
+                                     is_fp16=config_training['fp16'],
+                                     logging_steps=config_training['logging_steps'],
+                                     gradient_accumulation_steps=config_training['optimizer']['gradient_accumulation_steps'],
+                                     scaler=scaler,
+                                     model_name=config['model']['model_name'],
+                                     save_dir=config['training']['save_dir'],
+                                     save_steps=config_training['save_steps'],
+                                     config_model=config_model)
 
         # evaluation
-        test_loss, test_topks = eval_one_epoch(model,
-                                               test_dataloader,
-                                               device,
-                                               epoch,
-                                               logging_steps=config_training['logging_steps'],
-                                               is_fp16=config_training['fp16'],
-                                               top_ks=top_ks)
+        test_loss = eval_one_epoch(model,
+                                   model_class,
+                                   test_dataloader,
+                                   device,
+                                   epoch,
+                                   logging_steps=config_training['logging_steps'],
+                                   is_fp16=config_training['fp16'])
         # save model if test loss is minimum
         if test_loss < min_test_loss:
             min_test_loss = test_loss
@@ -341,13 +306,10 @@ def main():
                        test_loss)
             print(f"Succeed saving model with test loss: {test_loss}")
         print(f"Epoch {epoch} train loss: {train_loss}, test loss: {test_loss}")
-        for top_k, train_acc, test_acc in zip(top_ks, train_topks, test_topks):
-            print(f"top_{top_k}_acc for train and test: {train_acc}, {test_acc}")
-            wandb.log({f"epoch_top_{top_k}_acc_train": train_acc,
-                       f"epoch_top_{top_k}_acc_test": test_acc,
-                       "epoch_train_loss": train_loss,
-                       "epoch_test_loss": test_loss,
-                       "epoch": epoch})
+        # for train_acc, test_acc in zip(train_topks, test_topks):
+        wandb.log({"epoch_train_loss": train_loss,
+                    "epoch_test_loss": test_loss,
+                    "epoch": epoch})
     return
 
 

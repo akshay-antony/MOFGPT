@@ -1,5 +1,6 @@
 random_seed: 42
 project_name: "llama2_mof_gpt"
+
 data:
   csv_folder_paths: 
     - '../benchmark_datasets/QMOF/mofid/'
@@ -22,25 +23,9 @@ data:
     truncation: True
     use_topology: False
 
-model:
-  model_name: "llama2"
-  pretrained_model_name: "llama2"
-  hidden_size: 1024
-  intermediate_size: 2048
-  num_hidden_layers: 8
-  num_attention_heads: 8
-  num_key_value_heads: 8 # for grouped query attention
-  use_cache: False
-  rope_theta: 10000.0 # default value
-  hidden_act: "silu" # default value
-  # return vals
-  return_dict: True
-  output_attentions: False
-  output_hidden_states: False
-
 training:
   device: "cuda"
-  epochs: 10
+  epochs: 30
   fp16: True
   top_ks: [1, 3, 5]
   batch_size: 32 #4
@@ -55,6 +40,10 @@ training:
   logging_ratio: 0.05
   save_ratio: 0.5
   save_dir: "../saved_models/"
+
+model:
+  model_name: "gpt2"
+  model_config_filename: "../config/model.yaml"
 
 reinforcement_learning:
   training:
