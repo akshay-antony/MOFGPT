@@ -39,6 +39,9 @@ class MOF_ID_Dataset(Dataset):
         #     self.tokens = np.array([tokenizer.encode(i, max_length=512, truncation=True,padding='max_length') for i in self.mofid])
         self.tokens = []
         self.encode_all()
+        for i in range(len(self.tokens)):
+            if len(self.tokens[i]) > 512:
+                print(f"Token length: {len(self.tokens[i])}")
         #     self.tokens = np.array(self.tokens)
         print("Tokenizing finished")
         print(f"Number of mofs: {len(self.tokens)}")

@@ -7,3 +7,4 @@ wandb/**
 **/wandb/**
 .vscode/**
 saved_models/**
+./api_tokens.txt

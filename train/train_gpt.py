@@ -231,6 +231,7 @@ def main():
     config_model['eos_token_id'] = tokenizer.eos_token_id
     config_model['vocab_size'] = tokenizer.vocab_size
     config_model['max_position_embeddings'] = config_tokenizer['max_seq_len']
+    config_model['ignore_index'] = config_data['ignore_index']
 
     model = get_model(config['model']['model_name'],
                       config_model,

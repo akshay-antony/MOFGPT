@@ -260,14 +260,26 @@ class MOFTokenizerGPT(object):
       List[int]: List of ids (integer) corresponding to the tokenized text.
       """
       tokens = self.tokenize(text)
-      if self.truncation and len(tokens) > self.max_len:
+      if self.truncation:
          if self.add_special_tokens:
-            tokens = tokens[:self.max_len-2] # -2 for bos and eos
+            if len(tokens) > self.max_len-2:
+                tokens = tokens[:self.max_len-2]
+            tokens = [self.bos_token] + tokens + [self.eos_token]
          else:
-            tokens = tokens[:self.max_len]
+            if len(tokens) > self.max_len:
+                tokens = tokens[:self.max_len]
 
-      if self.add_special_tokens:
-          tokens = [self.bos_token] + tokens + [self.eos_token]
+      # if self.truncation and len(tokens) > self.max_len:
+      #    if self.add_special_tokens:
+      #       tokens = tokens[:self.max_len-2] # -2 for bos and eos
+      #    else:
+      #       tokens = tokens[:self.max_len]
+      
+      # if self.add_special_tokens:
+      #     tokens = [self.bos_token] + tokens + [self.eos_token]
+      if len(tokens) > self.max_len:
+          print(f"Token length: {len(tokens)}")
+          raise ValueError("Too many tokens in input sequence. The maximum sequence length is {}".format(self.max_len))
       return self.convert_tokens_to_ids(tokens)
            
 

@@ -1,5 +1,5 @@
-from cProfile import label
 import sys
+import torch
 sys.path.append("../")
 from torch.cuda.amp import autocast
 
@@ -38,11 +38,13 @@ class LLMModel():
                                        output_hidden_states=self.config["output_hidden_states"],)
                 
         elif self.model_name == "gpt2":
+            labels = torch.clone(token_ids)
+            labels[labels[:, :] == self.config["pad_token_id"]] = self.config["ignore_index"]
             if is_fp16:
                 with autocast():
                     outputs = self.network(input_ids=token_ids,
                                            attention_mask=mask_ids,
-                                           labels=token_ids,
+                                           labels=labels,
                                            use_cache=self.config["use_cache"],
                                            return_dict=self.config["return_dict"],
                                            output_attentions=self.config["output_attentions"],
@@ -50,6 +52,7 @@ class LLMModel():
             else:
                 outputs = self.network(input_ids=token_ids,
                                        attention_mask=mask_ids,
+                                       labels=labels,
                                        use_cache=self.config["use_cache"],
                                        return_dict=self.config["return_dict"],
                                        output_attentions=self.config["output_attentions"],
